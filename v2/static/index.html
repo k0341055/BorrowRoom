@@ -3,114 +3,168 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>高科線上借教室系統</title>
+  <title>學生個人管理系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: { brand: '#4f46e5' }
-        }
-      }
-    }
+    tailwind.config = { theme: { extend: { colors: { brand: '#4f46e5' } } } }
   </script>
   <style>
-    .fade-in { animation: fadeIn .25s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .fade-in { animation: fadeIn .2s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+    .tab-btn { @apply px-4 py-2 text-sm font-medium rounded-lg transition; }
+    .tab-btn.active { @apply bg-indigo-600 text-white; }
+    .tab-btn:not(.active) { @apply text-gray-500 hover:bg-gray-100; }
+    .gantt-bar {
+      position:absolute; height:32px; border-radius:6px;
+      display:flex; align-items:center; padding:0 8px;
+      font-size:11px; overflow:hidden; cursor:pointer; white-space:nowrap;
+    }
+    .notif-drawer {
+      position:fixed; top:0; right:0; height:100vh; width:340px;
+      background:white; box-shadow:-4px 0 20px rgba(0,0,0,.12);
+      z-index:200; transform:translateX(100%); transition:transform .25s ease;
+    }
+    .notif-drawer.open { transform:translateX(0); }
   </style>
 </head>
 <body class="bg-slate-100 min-h-screen font-sans">
 
-  <!-- ── LOGIN ─────────────────────────────────────────────── -->
-  <section id="loginSection" class="flex items-center justify-center min-h-screen px-4">
-    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm fade-in">
-      <div class="text-center mb-8">
-        <div class="text-4xl mb-2">🏫</div>
-        <h1 class="text-xl font-bold text-gray-800">高科線上借教室系統</h1>
-        <p class="text-sm text-gray-400 mt-1">National Kaohsiung University of Science and Technology</p>
-      </div>
-
-      <div id="loginAlert" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"></div>
-
-      <form id="loginForm" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-600 mb-1">學號</label>
-          <input id="sidInput" type="text" autocomplete="username"
-            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
-            placeholder="請輸入學號" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-600 mb-1">密碼</label>
-          <input id="passwordInput" type="password" autocomplete="current-password"
-            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
-            placeholder="請輸入密碼" />
-        </div>
-        <button type="submit"
-          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
-          登入
-        </button>
-      </form>
+<!-- ── LOGIN ──────────────────────────────────────────────────────── -->
+<section id="loginSection" class="flex items-center justify-center min-h-screen px-4">
+  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm fade-in">
+    <div class="text-center mb-8">
+      <div class="text-4xl mb-2">🏫</div>
+      <h1 class="text-xl font-bold text-gray-800">學生個人管理系統</h1>
+      <p class="text-xs text-gray-400 mt-1">選課 · 借教室 · 教室排程</p>
     </div>
-  </section>
-
-  <!-- ── DASHBOARD ─────────────────────────────────────────── -->
-  <section id="dashboardSection" class="hidden min-h-screen">
-
-    <!-- Navbar -->
-    <nav class="bg-indigo-600 text-white px-6 py-4 flex justify-between items-center shadow-md">
-      <div class="flex items-center gap-2">
-        <span class="text-lg">🏫</span>
-        <span class="font-bold text-sm sm:text-base">高科線上借教室系統</span>
+    <div id="loginAlert" class="hidden mb-4 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-600 border border-red-100"></div>
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">學號</label>
+        <input id="sidInput" type="text" autocomplete="username"
+          class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          placeholder="請輸入學號" />
       </div>
-      <div class="flex items-center gap-3">
-        <span id="navUser" class="text-sm opacity-90"></span>
-        <button onclick="handleLogout()"
-          class="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition">
-          登出
-        </button>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">密碼</label>
+        <input id="passwordInput" type="password" autocomplete="current-password"
+          class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          placeholder="請輸入密碼" />
       </div>
-    </nav>
+      <button type="submit"
+        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+        登入
+      </button>
+    </form>
+  </div>
+</section>
 
-    <!-- Toast -->
-    <div id="toast" class="hidden fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium fade-in max-w-sm text-center"></div>
+<!-- ── DASHBOARD ──────────────────────────────────────────────────── -->
+<section id="dashboardSection" class="hidden min-h-screen">
 
-    <div class="max-w-3xl mx-auto px-4 py-6 space-y-5">
+  <!-- Navbar -->
+  <nav class="bg-indigo-600 text-white px-5 py-3 flex justify-between items-center shadow-md sticky top-0 z-30">
+    <div class="flex items-center gap-2">
+      <span class="text-lg">🏫</span>
+      <span class="font-bold text-sm">學生個人管理系統</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="navUser" class="text-xs opacity-80 hidden sm:block"></span>
+      <!-- Notification bell -->
+      <button onclick="toggleNotifDrawer()" class="relative p-1">
+        <span class="text-lg">🔔</span>
+        <span id="notifBadge" class="hidden absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold"></span>
+      </button>
+      <button onclick="handleLogout()"
+        class="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition">
+        登出
+      </button>
+    </div>
+  </nav>
 
-      <!-- Status Card -->
-      <div class="bg-white rounded-2xl shadow p-6">
-        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">目前借用狀態</h2>
-        <div id="statusCard">
-          <div class="h-12 bg-gray-100 rounded-xl animate-pulse"></div>
+  <!-- Tab bar -->
+  <div class="bg-white border-b sticky top-[52px] z-20 px-4">
+    <div class="max-w-4xl mx-auto flex gap-1 py-2 overflow-x-auto">
+      <button class="tab-btn active" id="tab-status"   onclick="switchTab('status')">我的狀態</button>
+      <button class="tab-btn"        id="tab-enroll"   onclick="switchTab('enroll')">選課</button>
+      <button class="tab-btn"        id="tab-borrow"   onclick="switchTab('borrow')">借教室</button>
+      <button class="tab-btn"        id="tab-gantt"    onclick="switchTab('gantt')">教室甘特圖</button>
+      <button class="tab-btn"        id="tab-settings" onclick="switchTab('settings')">設定</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium fade-in max-w-xs text-center pointer-events-none"></div>
+
+  <div class="max-w-4xl mx-auto px-4 py-5">
+
+    <!-- ══ TAB: 我的狀態 ══════════════════════════════════════════ -->
+    <div id="page-status" class="space-y-5 fade-in">
+
+      <!-- 我的借用狀態 -->
+      <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">我的借用狀態</h2>
+        <div id="statusCard"><div class="h-12 bg-gray-100 rounded-xl animate-pulse"></div></div>
+        <div id="returnBtnWrap" class="hidden mt-3">
+          <button onclick="handleReturn()"
+            class="bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold px-5 py-2 rounded-xl transition">
+            歸還教室
+          </button>
         </div>
       </div>
 
-      <!-- My Courses -->
-      <div class="bg-white rounded-2xl shadow p-6">
+      <!-- 修課教室借用狀況 -->
+      <div class="bg-white rounded-2xl shadow p-5">
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">我的修課清單</h2>
-          <button onclick="loadMyCourses()"
-            class="text-xs text-indigo-500 hover:underline">重整</button>
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">修課教室借用狀況</h2>
+          <button onclick="loadMyRoomBorrows()" class="text-xs text-indigo-500 hover:underline">重整</button>
         </div>
-        <div id="myCourses">
-          <div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div>
-        </div>
+        <div id="myRoomBorrows"><div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div></div>
       </div>
 
-      <!-- Borrow Form -->
-      <div class="bg-white rounded-2xl shadow p-6">
-        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">借教室</h2>
+    </div>
+
+    <!-- ══ TAB: 選課 ══════════════════════════════════════════════ -->
+    <div id="page-enroll" class="hidden space-y-5 fade-in">
+
+      <!-- 我的修課清單 -->
+      <div class="bg-white rounded-2xl shadow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">已選課程</h2>
+          <button onclick="loadMyCourses()" class="text-xs text-indigo-500 hover:underline">重整</button>
+        </div>
+        <div id="myCourses"><div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div></div>
+      </div>
+
+      <!-- 可選課程 -->
+      <div class="bg-white rounded-2xl shadow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">可加選課程</h2>
+          <button onclick="loadAvailableCourses()" class="text-xs text-indigo-500 hover:underline">重整</button>
+        </div>
+        <div id="availCourses"><div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div></div>
+      </div>
+
+    </div>
+
+    <!-- ══ TAB: 借教室 ════════════════════════════════════════════ -->
+    <div id="page-borrow" class="hidden space-y-5 fade-in">
+      <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">借教室</h2>
+        <p class="text-xs text-gray-400 mb-3">點擊下方已選課程可自動填入表單</p>
+        <div id="borrowQuickList" class="mb-4"></div>
         <form id="borrowForm" class="space-y-3">
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-sm font-medium text-gray-600 mb-1">課程編號</label>
               <input id="cnoInput" type="text"
-                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 placeholder="例：1374" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-600 mb-1">教室</label>
               <input id="roomInput" type="text"
-                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 placeholder="例：E117" />
             </div>
           </div>
@@ -120,25 +174,51 @@
           </button>
         </form>
       </div>
+    </div>
 
-      <!-- Return Button -->
-      <div class="bg-white rounded-2xl shadow p-6">
-        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">還教室</h2>
-        <button onclick="handleReturn()"
-          class="bg-rose-500 hover:bg-rose-600 text-white font-semibold py-2 px-6 rounded-xl transition text-sm">
-          歸還目前借用的教室
-        </button>
+    <!-- ══ TAB: 甘特圖 ════════════════════════════════════════════ -->
+    <div id="page-gantt" class="hidden space-y-5 fade-in">
+      <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">教室甘特圖</h2>
+        <div class="flex flex-wrap gap-3 items-end mb-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">選擇課程（查看該教室排程）</label>
+            <select id="ganttCourseSelect"
+              class="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 min-w-[220px]">
+              <option value="">— 請選擇課程 —</option>
+            </select>
+          </div>
+          <button onclick="loadGantt()"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
+            查看
+          </button>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex flex-wrap gap-3 mb-4 text-xs">
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-300 inline-block"></span>空閒</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-indigo-400 inline-block"></span>我借用中</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-300 inline-block"></span>他人借用中</span>
+          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-rose-400 inline-block"></span>可強制歸還</span>
+        </div>
+
+        <!-- Gantt chart area -->
+        <div id="ganttWrap" class="overflow-x-auto">
+          <p class="text-gray-400 text-sm">請選擇課程查看排程</p>
+        </div>
+
+        <!-- Detail panel -->
+        <div id="ganttDetail" class="hidden mt-4 bg-slate-50 rounded-xl p-4 text-sm space-y-1"></div>
       </div>
+    </div>
 
-      <!-- Change Password -->
-      <div class="bg-white rounded-2xl shadow p-6">
-        <button class="w-full flex justify-between items-center text-left" onclick="toggleSection('pwSection','pwArrow')">
-          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">更改密碼</h2>
-          <span id="pwArrow" class="text-gray-400 transition-transform">▼</span>
-        </button>
-        <div id="pwSection" class="hidden mt-4 space-y-3">
+    <!-- ══ TAB: 設定 ══════════════════════════════════════════════ -->
+    <div id="page-settings" class="hidden fade-in">
+      <div class="bg-white rounded-2xl shadow p-5">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">更改密碼</h2>
+        <div class="space-y-3 max-w-sm">
           <input id="newPwInput" type="password"
-            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             placeholder="請輸入新密碼" />
           <button onclick="handleChangePw()"
             class="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-6 rounded-xl transition text-sm">
@@ -146,39 +226,43 @@
           </button>
         </div>
       </div>
-
-      <!-- All Active Borrows -->
-      <div class="bg-white rounded-2xl shadow p-6">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">目前所有借用紀錄</h2>
-          <button onclick="loadAllBorrows()"
-            class="text-xs text-indigo-500 hover:underline">重整</button>
-        </div>
-        <div id="allBorrows">
-          <div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div>
-        </div>
-      </div>
-
     </div>
-  </section>
 
-  <!-- Key Modal -->
-  <div id="keyModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center fade-in">
-      <div class="text-4xl mb-3">🎉</div>
-      <h3 class="text-lg font-bold text-gray-800 mb-1">借教室成功！</h3>
-      <p class="text-sm text-gray-500 mb-4">請妥善保存以下密碼，盡快前往使用</p>
-      <div class="bg-indigo-50 rounded-xl py-4 px-6 mb-5">
-        <p class="text-xs text-indigo-400 mb-1">教室密碼</p>
-        <p id="keyDisplay" class="text-2xl font-mono font-bold text-indigo-700 tracking-widest"></p>
-      </div>
-      <button onclick="closeKeyModal()"
-        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
-        確認
-      </button>
+  </div><!-- /max-w-4xl -->
+</section>
+
+<!-- ── KEY MODAL ──────────────────────────────────────────────────── -->
+<div id="keyModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center fade-in">
+    <div class="text-4xl mb-3">🎉</div>
+    <h3 class="text-lg font-bold text-gray-800 mb-1">借教室成功！</h3>
+    <p class="text-sm text-gray-500 mb-4">請妥善保存以下密碼，盡快前往使用</p>
+    <div class="bg-indigo-50 rounded-xl py-4 px-6 mb-5">
+      <p class="text-xs text-indigo-400 mb-1">教室密碼</p>
+      <p id="keyDisplay" class="text-2xl font-mono font-bold text-indigo-700 tracking-widest"></p>
+    </div>
+    <button onclick="closeKeyModal()"
+      class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+      確認
+    </button>
+  </div>
+</div>
+
+<!-- ── NOTIFICATION DRAWER ────────────────────────────────────────── -->
+<div id="notifOverlay" class="hidden fixed inset-0 z-40 bg-black/20" onclick="toggleNotifDrawer()"></div>
+<div id="notifDrawer" class="notif-drawer flex flex-col">
+  <div class="flex items-center justify-between px-5 py-4 border-b">
+    <h3 class="font-bold text-gray-700">通知</h3>
+    <div class="flex items-center gap-3">
+      <button onclick="markAllRead()" class="text-xs text-indigo-500 hover:underline">全部已讀</button>
+      <button onclick="toggleNotifDrawer()" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
     </div>
   </div>
+  <div id="notifList" class="flex-1 overflow-y-auto p-4 space-y-2">
+    <p class="text-gray-400 text-sm text-center mt-8">載入中...</p>
+  </div>
+</div>
 
-  <script src="/static/app.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>

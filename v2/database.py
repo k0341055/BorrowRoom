@@ -12,6 +12,8 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+# ── Auth ───────────────────────────────────────────────────────────────────────
+
 def authenticate(sid: str, password: str) -> Optional[dict]:
     with _conn() as conn:
         row = conn.execute(
@@ -26,6 +28,8 @@ def change_password(sid: str, new_password: str) -> None:
         conn.execute("UPDATE students SET password=? WHERE sid=?", (new_password, sid))
         conn.commit()
 
+
+# ── Borrow / Return ────────────────────────────────────────────────────────────
 
 def get_my_borrow(sid: str) -> Optional[dict]:
     with _conn() as conn:
@@ -83,7 +87,186 @@ def get_lender_contact(sid: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def get_all_active_borrows() -> list[dict]:
+# ── Courses / Enrollment ───────────────────────────────────────────────────────
+
+def get_enrolled_courses(sid: str) -> list:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT c.c_no, c.title, c.time, c.room, c.credits
+               FROM classes cl
+               JOIN courses c ON cl.c_no = c.c_no
+               WHERE cl.sid=?
+               ORDER BY c.time""",
+            (sid,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_available_courses(sid: str) -> list:
+    """All courses not yet enrolled by this student."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT c.c_no, c.title, c.time, c.room, c.credits
+               FROM courses c
+               WHERE c.c_no NOT IN (
+                   SELECT cl.c_no FROM classes cl WHERE cl.sid=?
+               )
+               ORDER BY c.room, c.time""",
+            (sid,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def enroll_course(sid: str, c_no: str) -> None:
+    """Add student to classes; ensure a sentinel borrow row exists."""
+    with _conn() as conn:
+        # Get room from courses table
+        row = conn.execute("SELECT room, time FROM courses WHERE c_no=?", (c_no,)).fetchone()
+        if not row:
+            raise ValueError("課程不存在")
+        room, time = row["room"], row["time"]
+        conn.execute(
+            "INSERT OR IGNORE INTO classes(sid,c_no,room) VALUES(?,?,?)",
+            (sid, c_no, room),
+        )
+        # Ensure sentinel borrow row exists for Gantt
+        conn.execute(
+            "INSERT OR IGNORE INTO borrows(c_no,time,room,lend_sid,lend_name,lend_password) VALUES(?,?,?,?,?,?)",
+            (c_no, time, room, EMPTY, EMPTY, EMPTY),
+        )
+        conn.commit()
+
+
+def drop_course(sid: str, c_no: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM classes WHERE sid=? AND c_no=?",
+            (sid, c_no),
+        )
+        conn.commit()
+
+
+# ── Room schedule (Gantt) ──────────────────────────────────────────────────────
+
+def get_room_schedule(room: str, sid: str) -> list:
+    """
+    All courses in a given room with borrow status.
+    Includes `is_enrolled_by_me` flag and `can_force_return` flag.
+    can_force_return = course is currently borrowed AND requester is enrolled
+    in a later course in the SAME room whose start >= this course's end.
+    """
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT c.c_no, c.title, c.time, c.credits, c.room,
+                      b.lend_sid, b.lend_name,
+                      CASE WHEN cl.sid IS NOT NULL THEN 1 ELSE 0 END AS is_enrolled_by_me
+               FROM courses c
+               JOIN borrows b ON c.c_no = b.c_no
+               LEFT JOIN classes cl ON cl.c_no = c.c_no AND cl.sid = ?
+               WHERE c.room = ?
+               ORDER BY c.time""",
+            (sid, room),
+        ).fetchall()
+        result = []
+        for r in rows:
+            item = dict(r)
+            # can_force_return: course is occupied by someone else AND
+            # I am enrolled in another course in this room that starts >= this course's end
+            can_force = False
+            if item["lend_sid"] != EMPTY and item["lend_sid"] != sid:
+                check = conn.execute(
+                    """SELECT 1
+                       FROM classes my_cl
+                       JOIN courses my_c ON my_cl.c_no = my_c.c_no
+                       JOIN courses tgt  ON tgt.c_no = ?
+                       WHERE my_cl.sid = ?
+                         AND my_c.room = tgt.room
+                         AND (
+                           (CAST(substr(my_c.time,1,2) AS INTEGER)*60 + CAST(substr(my_c.time,4,2) AS INTEGER))
+                           >=
+                           (CAST(substr(tgt.time,1,2) AS INTEGER)*60 + CAST(substr(tgt.time,4,2) AS INTEGER))
+                             + (tgt.credits * 60) - 10
+                         )
+                       LIMIT 1""",
+                    (item["c_no"], sid),
+                ).fetchone()
+                can_force = check is not None
+            item["can_force_return"] = can_force
+            result.append(item)
+    return result
+
+
+# ── Borrows in my enrolled rooms ───────────────────────────────────────────────
+
+def get_borrows_in_my_rooms(sid: str) -> list:
+    """Active borrows only for rooms the current user is enrolled in."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT b.c_no, b.room, b.lend_sid, b.lend_name,
+                      c.title, c.time, c.credits
+               FROM borrows b
+               JOIN courses c ON b.c_no = c.c_no
+               WHERE b.lend_sid != ?
+                 AND b.room IN (
+                     SELECT DISTINCT cr.room FROM classes cl
+                     JOIN courses cr ON cl.c_no = cr.c_no
+                     WHERE cl.sid = ?
+                 )
+               ORDER BY b.room, c.time""",
+            (EMPTY, sid),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Force return ───────────────────────────────────────────────────────────────
+
+def force_return_room(target_c_no: str, requester_sid: str) -> str:
+    """
+    Forcibly return the room borrowed under target_c_no.
+    Returns the displaced borrower's sid (for notification).
+    Raises ValueError if not authorized or room not borrowed.
+    """
+    with _conn() as conn:
+        borrow = conn.execute(
+            "SELECT lend_sid, room FROM borrows WHERE c_no=?",
+            (target_c_no,),
+        ).fetchone()
+        if not borrow or borrow["lend_sid"] == EMPTY:
+            raise ValueError("該教室目前未被借用")
+
+        displaced_sid = borrow["lend_sid"]
+        if displaced_sid == requester_sid:
+            raise ValueError("無法強制歸還自己借用的教室")
+
+        # Check requester is enrolled in a later course in the same room
+        auth = conn.execute(
+            """SELECT 1
+               FROM classes my_cl
+               JOIN courses my_c ON my_cl.c_no = my_c.c_no
+               JOIN courses tgt  ON tgt.c_no = ?
+               WHERE my_cl.sid = ?
+                 AND my_c.room = tgt.room
+                 AND (
+                   (CAST(substr(my_c.time,1,2) AS INTEGER)*60 + CAST(substr(my_c.time,4,2) AS INTEGER))
+                   >=
+                   (CAST(substr(tgt.time,1,2) AS INTEGER)*60 + CAST(substr(tgt.time,4,2) AS INTEGER))
+                     + (tgt.credits * 60) - 10
+                 )
+               LIMIT 1""",
+            (target_c_no, requester_sid),
+        ).fetchone()
+        if not auth:
+            raise ValueError("您沒有權限強制歸還此教室（需修同教室的後續課程）")
+
+        conn.execute(
+            "UPDATE borrows SET lend_sid=?, lend_name=?, lend_password=? WHERE c_no=?",
+            (EMPTY, EMPTY, EMPTY, target_c_no),
+        )
+        conn.commit()
+    return displaced_sid
+
+
+def get_all_active_borrows() -> list:
     with _conn() as conn:
         rows = conn.execute(
             """SELECT b.c_no, b.room, b.lend_sid, b.lend_name, c.title
@@ -95,13 +278,39 @@ def get_all_active_borrows() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_enrolled_courses(sid: str) -> list[dict]:
+# ── Notifications ──────────────────────────────────────────────────────────────
+
+def create_notification(to_sid: str, from_sid: str, message: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO notifications(to_sid,from_sid,message) VALUES(?,?,?)",
+            (to_sid, from_sid, message),
+        )
+        conn.commit()
+
+
+def get_notifications(sid: str) -> list:
     with _conn() as conn:
         rows = conn.execute(
-            """SELECT c.c_no, c.title, c.time, c.room
-               FROM classes cl
-               JOIN courses c ON cl.c_no = c.c_no
-               WHERE cl.sid=?""",
+            """SELECT id, from_sid, message, is_read, created_at
+               FROM notifications WHERE to_sid=?
+               ORDER BY is_read ASC, created_at DESC
+               LIMIT 50""",
             (sid,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def mark_notifications_read(sid: str, notif_id: Optional[int] = None) -> None:
+    with _conn() as conn:
+        if notif_id is not None:
+            conn.execute(
+                "UPDATE notifications SET is_read=1 WHERE id=? AND to_sid=?",
+                (notif_id, sid),
+            )
+        else:
+            conn.execute(
+                "UPDATE notifications SET is_read=1 WHERE to_sid=?",
+                (sid,),
+            )
+        conn.commit()
