@@ -3,6 +3,8 @@ __pycache__/
 
 # Database — contains student data, never commit to public repo
 db.sqlite
+db_org.sqlite
+*.sqlite
 
 # Generated exports
 *.xlsx
