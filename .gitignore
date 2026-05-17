@@ -1,1 +1,9 @@
 __pycache__/
+*.pyc
+
+# Database — contains student data, never commit to public repo
+db.sqlite
+
+# Generated exports
+*.xlsx
+*.csv
