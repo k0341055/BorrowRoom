@@ -406,16 +406,35 @@
 
 <!-- ────────────────────────────────── KEY MODAL ── -->
 <div id="keyModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-  <div class="card w-full max-w-sm text-center fade-in shadow-2xl">
-    <div class="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/40 rounded-2xl flex items-center justify-center mx-auto mb-4">
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  <div class="card w-full max-w-md fade-in shadow-2xl">
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/40 rounded-2xl flex items-center justify-center shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div>
+        <h3 class="font-bold text-lg dark:text-slate-100">借教室成功！</h3>
+        <p id="keyModalSub" class="text-xs text-slate-400 dark:text-slate-500 mt-0.5"></p>
+      </div>
     </div>
-    <h3 class="text-lg font-bold mb-1">借教室成功！</h3>
-    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">請妥善保存以下密碼，盡快前往使用</p>
-    <div class="bg-indigo-50 dark:bg-indigo-900/40 rounded-2xl py-4 px-6 mb-5 border border-indigo-200 dark:border-indigo-800">
-      <p class="text-xs text-indigo-400 mb-1">教室密碼</p>
-      <p id="keyDisplay" class="text-2xl font-mono font-bold text-indigo-700 dark:text-indigo-300 tracking-widest"></p>
+
+    <!-- QR code -->
+    <div class="bg-white rounded-2xl p-5 mb-4 flex flex-col items-center border border-slate-200 shadow-inner">
+      <div id="qrContainer" class="flex items-center justify-center"></div>
+      <p class="text-xs text-slate-400 mt-3">掃描此 QR Code 於教室門口開門</p>
+      <div class="flex items-center gap-2 mt-2">
+        <span id="qrDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="qrCountdown" class="text-sm font-mono font-bold text-slate-700">--:--:--</span>
+        <span class="text-xs text-slate-400">後失效</span>
+      </div>
     </div>
+
+    <!-- Backup key -->
+    <div class="bg-slate-50 dark:bg-slate-700/40 rounded-xl py-3 px-4 mb-5 text-center border border-slate-100 dark:border-slate-700">
+      <p class="text-xs text-slate-400 mb-1">備用密碼（無法掃碼時輸入）</p>
+      <p id="keyDisplay" class="text-xl font-mono font-bold text-indigo-700 dark:text-indigo-300 tracking-widest select-all"></p>
+    </div>
+
     <button onclick="closeKeyModal()"
       class="w-full bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-semibold py-2.5 rounded-xl transition text-sm">
       確認
@@ -467,6 +486,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
