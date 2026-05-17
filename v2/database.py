@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 DB_PATH = Path(__file__).parent.parent / "db.sqlite"
 EMPTY = "null"  # Sentinel stored in DB for unoccupied borrow fields
@@ -11,7 +12,7 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
-def authenticate(sid: str, password: str) -> dict | None:
+def authenticate(sid: str, password: str) -> Optional[dict]:
     with _conn() as conn:
         row = conn.execute(
             "SELECT sid, name, dep, phone FROM students WHERE sid=? AND password=?",
@@ -26,7 +27,7 @@ def change_password(sid: str, new_password: str) -> None:
         conn.commit()
 
 
-def get_my_borrow(sid: str) -> dict | None:
+def get_my_borrow(sid: str) -> Optional[dict]:
     with _conn() as conn:
         row = conn.execute(
             """SELECT b.c_no, b.room, c.title
@@ -38,7 +39,7 @@ def get_my_borrow(sid: str) -> dict | None:
     return dict(row) if row else None
 
 
-def get_room(c_no: str, room: str) -> dict | None:
+def get_room(c_no: str, room: str) -> Optional[dict]:
     with _conn() as conn:
         row = conn.execute(
             "SELECT c_no, room, lend_sid, lend_name FROM borrows WHERE c_no=? AND room=?",
@@ -74,7 +75,7 @@ def return_room(sid: str) -> None:
         conn.commit()
 
 
-def get_lender_contact(sid: str) -> dict | None:
+def get_lender_contact(sid: str) -> Optional[dict]:
     with _conn() as conn:
         row = conn.execute(
             "SELECT name, phone FROM students WHERE sid=?", (sid,)
