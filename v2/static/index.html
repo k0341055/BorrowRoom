@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>高科線上借教室系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { brand: '#4f46e5' }
+        }
+      }
+    }
+  </script>
+  <style>
+    .fade-in { animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans">
+
+  <!-- ── LOGIN ─────────────────────────────────────────────── -->
+  <section id="loginSection" class="flex items-center justify-center min-h-screen px-4">
+    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm fade-in">
+      <div class="text-center mb-8">
+        <div class="text-4xl mb-2">🏫</div>
+        <h1 class="text-xl font-bold text-gray-800">高科線上借教室系統</h1>
+        <p class="text-sm text-gray-400 mt-1">National Kaohsiung University of Science and Technology</p>
+      </div>
+
+      <div id="loginAlert" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"></div>
+
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-600 mb-1">學號</label>
+          <input id="sidInput" type="text" autocomplete="username"
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+            placeholder="請輸入學號" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-600 mb-1">密碼</label>
+          <input id="passwordInput" type="password" autocomplete="current-password"
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+            placeholder="請輸入密碼" />
+        </div>
+        <button type="submit"
+          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+          登入
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ── DASHBOARD ─────────────────────────────────────────── -->
+  <section id="dashboardSection" class="hidden min-h-screen">
+
+    <!-- Navbar -->
+    <nav class="bg-indigo-600 text-white px-6 py-4 flex justify-between items-center shadow-md">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">🏫</span>
+        <span class="font-bold text-sm sm:text-base">高科線上借教室系統</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="navUser" class="text-sm opacity-90"></span>
+        <button onclick="handleLogout()"
+          class="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition">
+          登出
+        </button>
+      </div>
+    </nav>
+
+    <!-- Toast -->
+    <div id="toast" class="hidden fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium fade-in max-w-sm text-center"></div>
+
+    <div class="max-w-3xl mx-auto px-4 py-6 space-y-5">
+
+      <!-- Status Card -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">目前借用狀態</h2>
+        <div id="statusCard">
+          <div class="h-12 bg-gray-100 rounded-xl animate-pulse"></div>
+        </div>
+      </div>
+
+      <!-- My Courses -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">我的修課清單</h2>
+          <button onclick="loadMyCourses()"
+            class="text-xs text-indigo-500 hover:underline">重整</button>
+        </div>
+        <div id="myCourses">
+          <div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div>
+        </div>
+      </div>
+
+      <!-- Borrow Form -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">借教室</h2>
+        <form id="borrowForm" class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">課程編號</label>
+              <input id="cnoInput" type="text"
+                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                placeholder="例：1374" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1">教室</label>
+              <input id="roomInput" type="text"
+                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                placeholder="例：E117" />
+            </div>
+          </div>
+          <button type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition text-sm">
+            借教室
+          </button>
+        </form>
+      </div>
+
+      <!-- Return Button -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">還教室</h2>
+        <button onclick="handleReturn()"
+          class="bg-rose-500 hover:bg-rose-600 text-white font-semibold py-2 px-6 rounded-xl transition text-sm">
+          歸還目前借用的教室
+        </button>
+      </div>
+
+      <!-- Change Password -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <button class="w-full flex justify-between items-center text-left" onclick="toggleSection('pwSection','pwArrow')">
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">更改密碼</h2>
+          <span id="pwArrow" class="text-gray-400 transition-transform">▼</span>
+        </button>
+        <div id="pwSection" class="hidden mt-4 space-y-3">
+          <input id="newPwInput" type="password"
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+            placeholder="請輸入新密碼" />
+          <button onclick="handleChangePw()"
+            class="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-6 rounded-xl transition text-sm">
+            更新密碼
+          </button>
+        </div>
+      </div>
+
+      <!-- All Active Borrows -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">目前所有借用紀錄</h2>
+          <button onclick="loadAllBorrows()"
+            class="text-xs text-indigo-500 hover:underline">重整</button>
+        </div>
+        <div id="allBorrows">
+          <div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Key Modal -->
+  <div id="keyModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center fade-in">
+      <div class="text-4xl mb-3">🎉</div>
+      <h3 class="text-lg font-bold text-gray-800 mb-1">借教室成功！</h3>
+      <p class="text-sm text-gray-500 mb-4">請妥善保存以下密碼，盡快前往使用</p>
+      <div class="bg-indigo-50 rounded-xl py-4 px-6 mb-5">
+        <p class="text-xs text-indigo-400 mb-1">教室密碼</p>
+        <p id="keyDisplay" class="text-2xl font-mono font-bold text-indigo-700 tracking-widest"></p>
+      </div>
+      <button onclick="closeKeyModal()"
+        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+        確認
+      </button>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
