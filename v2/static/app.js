@@ -124,35 +124,46 @@ function switchTab(name) {
 // ── Status tab ─────────────────────────────────────────────────────────────────
 async function loadStatus() {
   try {
-    const { borrow } = await api('/borrow/me');
-    renderStatusCard(borrow);
-  } catch { renderStatusCard(null); }
+    const { borrows } = await api('/borrow/me');
+    renderStatusCard(borrows);
+  } catch { renderStatusCard([]); }
 }
 
-function renderStatusCard(borrow) {
+function renderStatusCard(borrows) {
   const card = document.getElementById('statusCard');
   const btn  = document.getElementById('returnBtnWrap');
-  if (borrow) {
-    card.innerHTML = `
-      <div class="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl p-4
+  btn.classList.add('hidden'); // individual return buttons are inside the card now
+
+  if (borrows && borrows.length) {
+    card.innerHTML = borrows.map(b => `
+      <div class="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl p-3
                   border border-indigo-100 dark:border-indigo-800/50">
-        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0 animate-pulse"></span>
-        <div>
-          <p class="font-semibold text-indigo-700 dark:text-indigo-300 text-sm">借用中</p>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            課程：${borrow.c_no}（${borrow.title}）&nbsp;｜&nbsp;
-            教室：<strong>${borrow.room}</strong>&nbsp;｜&nbsp;${formatTimeRange(borrow.time, borrow.credits)}
+        <span class="w-2 h-2 rounded-full bg-indigo-500 shrink-0 animate-pulse"></span>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-indigo-700 dark:text-indigo-300 text-sm">
+            <strong>${b.room}</strong>
+            <span class="font-normal text-xs ml-1 text-slate-500 dark:text-slate-400">
+              ${b.c_no} · ${b.title} · ${weekdayLabel(b.weekday)} ${formatTimeRange(b.time, b.credits)}
+            </span>
           </p>
         </div>
-      </div>`;
-    btn.classList.remove('hidden');
+        <button onclick="handleReturn('${b.c_no}','${b.room}')"
+          class="flex items-center gap-1.5 shrink-0 bg-rose-500 hover:bg-rose-600 text-white
+                 text-xs font-semibold px-3 py-1.5 rounded-xl transition shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"
+               stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/>
+          </svg>
+          歸還
+        </button>
+      </div>`).join('');
   } else {
     card.innerHTML = `
       <div class="flex items-center gap-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl p-4">
         <span class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-500 shrink-0"></span>
         <p class="text-slate-400 dark:text-slate-500 text-sm">目前沒有借用任何教室</p>
       </div>`;
-    btn.classList.add('hidden');
   }
 }
 
@@ -352,10 +363,10 @@ async function handleBorrowFromGantt(c_no, room) {
 }
 
 // ── Return ─────────────────────────────────────────────────────────────────────
-async function handleReturn() {
-  if (!confirm('確定要歸還教室？')) return;
+async function handleReturn(c_no, room) {
+  if (!confirm(`確定要歸還教室「${room}」？`)) return;
   try {
-    const data = await api('/return', { method: 'POST' });
+    const data = await api('/return', { method: 'POST', body: JSON.stringify({ c_no }) });
     toast(data.message, 'success');
     loadStatus();
     loadMyRoomBorrows();

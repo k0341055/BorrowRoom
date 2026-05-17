@@ -16,6 +16,7 @@ from models import (
     ForceReturnRequest,
     LoginRequest,
     MarkReadRequest,
+    ReturnRequest,
 )
 
 app = FastAPI(title="學生個人管理系統 API", version="2.0.0")
@@ -79,9 +80,9 @@ def change_password(req: ChangePasswordRequest, auth=Depends(get_auth)):
 # ── Borrow ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/borrow/me")
-def get_my_borrow(auth=Depends(get_auth)):
+def get_my_borrows(auth=Depends(get_auth)):
     _, user = auth
-    return {"borrow": db.get_my_borrow(user["sid"])}
+    return {"borrows": db.get_my_borrows(user["sid"])}
 
 
 @app.post("/api/borrow")
@@ -94,13 +95,6 @@ def borrow_room(req: BorrowRequest, auth=Depends(get_auth)):
 
     if not db.is_enrolled(user["sid"], req.c_no):
         raise HTTPException(status_code=403, detail="您未修該門課，無法借用此教室")
-
-    existing = db.get_my_borrow(user["sid"])
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"您已借有「{existing['room']}」教室，請先歸還後再借其他教室",
-        )
 
     if room_info["lend_sid"] != "null":
         lender = db.get_lender_contact(room_info["lend_sid"])
@@ -115,13 +109,22 @@ def borrow_room(req: BorrowRequest, auth=Depends(get_auth)):
 
 
 @app.post("/api/return")
-def return_room(auth=Depends(get_auth)):
+def return_room(req: ReturnRequest, auth=Depends(get_auth)):
     _, user = auth
-    existing = db.get_my_borrow(user["sid"])
-    if not existing:
-        raise HTTPException(status_code=404, detail="您目前沒有借教室紀錄")
-    db.return_room(user["sid"])
-    return {"message": f"教室「{existing['room']}」已成功歸還"}
+    room_info = db.get_room(req.c_no, "")  # fetch by c_no only
+    # Look up the actual room name from the borrow record
+    import sqlite3 as _sql
+    conn = _sql.connect(str(db.DB_PATH))
+    conn.row_factory = _sql.Row
+    borrow = conn.execute(
+        "SELECT room FROM borrows WHERE c_no=? AND lend_sid=?",
+        (req.c_no, user["sid"])
+    ).fetchone()
+    conn.close()
+    if not borrow:
+        raise HTTPException(status_code=404, detail="找不到此借用紀錄，或教室已歸還")
+    db.return_room(user["sid"], req.c_no)
+    return {"message": f"教室「{borrow['room']}」已成功歸還"}
 
 
 # ── Force return ──────────────────────────────────────────────────────────────
@@ -177,8 +180,8 @@ def enroll(req: EnrollRequest, auth=Depends(get_auth)):
 @app.delete("/api/enroll/{c_no}")
 def drop(c_no: str, auth=Depends(get_auth)):
     _, user = auth
-    existing = db.get_my_borrow(user["sid"])
-    if existing and existing["c_no"] == c_no:
+    active = db.get_my_borrows(user["sid"])
+    if any(b["c_no"] == c_no for b in active):
         raise HTTPException(status_code=409, detail="您正在借用此課程的教室，請先歸還後再退選")
     db.drop_course(user["sid"], c_no)
     return {"message": "退選成功"}

@@ -31,16 +31,18 @@ def change_password(sid: str, new_password: str) -> None:
 
 # ── Borrow / Return ────────────────────────────────────────────────────────────
 
-def get_my_borrow(sid: str) -> Optional[dict]:
+def get_my_borrows(sid: str) -> list:
+    """Return all rooms currently borrowed by this student."""
     with _conn() as conn:
-        row = conn.execute(
+        rows = conn.execute(
             """SELECT b.c_no, b.room, c.title, c.weekday, c.time, c.credits
                FROM borrows b
                JOIN courses c ON b.c_no = c.c_no
-               WHERE b.lend_sid=?""",
+               WHERE b.lend_sid=?
+               ORDER BY c.weekday, c.time""",
             (sid,),
-        ).fetchone()
-    return dict(row) if row else None
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_room(c_no: str, room: str) -> Optional[dict]:
@@ -70,11 +72,12 @@ def borrow_room(sid: str, name: str, c_no: str, room: str, key: str) -> None:
         conn.commit()
 
 
-def return_room(sid: str) -> None:
+def return_room(sid: str, c_no: str) -> None:
+    """Return the specific room borrowed by this student for this course."""
     with _conn() as conn:
         conn.execute(
-            "UPDATE borrows SET lend_sid=?, lend_name=?, lend_password=? WHERE lend_sid=?",
-            (EMPTY, EMPTY, EMPTY, sid),
+            "UPDATE borrows SET lend_sid=?, lend_name=?, lend_password=? WHERE c_no=? AND lend_sid=?",
+            (EMPTY, EMPTY, EMPTY, c_no, sid),
         )
         conn.commit()
 
