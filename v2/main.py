@@ -1,6 +1,7 @@
 import secrets
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -186,10 +187,10 @@ def drop(c_no: str, auth=Depends(get_auth)):
 # ── Room schedule (Gantt) ─────────────────────────────────────────────────────
 
 @app.get("/api/rooms/{room}/schedule")
-def room_schedule(room: str, auth=Depends(get_auth)):
+def room_schedule(room: str, weekday: Optional[int] = None, auth=Depends(get_auth)):
     _, user = auth
-    schedule = db.get_room_schedule(room, user["sid"])
-    return {"room": room, "schedule": schedule}
+    schedule = db.get_room_schedule(room, user["sid"], weekday)
+    return {"room": room, "weekday": weekday, "schedule": schedule}
 
 
 # ── Borrows in my enrolled rooms ──────────────────────────────────────────────

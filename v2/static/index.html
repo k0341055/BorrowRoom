@@ -1,265 +1,469 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" class="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>學生個人管理系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { theme: { extend: { colors: { brand: '#4f46e5' } } } }
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: { brand: { DEFAULT: '#4f46e5', dark: '#818cf8' } }
+        }
+      }
+    }
   </script>
   <style>
-    .fade-in { animation: fadeIn .2s ease; }
-    @keyframes fadeIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
-    .tab-btn { @apply px-4 py-2 text-sm font-medium rounded-lg transition; }
-    .tab-btn.active { @apply bg-indigo-600 text-white; }
-    .tab-btn:not(.active) { @apply text-gray-500 hover:bg-gray-100; }
-    .gantt-bar {
-      position:absolute; height:32px; border-radius:6px;
-      display:flex; align-items:center; padding:0 8px;
-      font-size:11px; overflow:hidden; cursor:pointer; white-space:nowrap;
+    /* ── CSS variables for theming ── */
+    :root {
+      --bg:       #f1f5f9;
+      --surface:  #ffffff;
+      --border:   #e2e8f0;
+      --muted:    #64748b;
+      --accent:   #4f46e5;
+      --px-hour:  64px; /* timetable: pixels per hour */
     }
+    .dark {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --border:   #334155;
+      --muted:    #94a3b8;
+      --accent:   #818cf8;
+    }
+
+    body { background: var(--bg); transition: background .2s, color .2s; }
+
+    /* ── Fade animation ── */
+    .fade-in { animation: fadeIn .2s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+    /* ── Tab bar ── */
+    .tab-item {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:3px; padding:8px 12px; border-radius:12px;
+      cursor:pointer; transition:all .15s; color: var(--muted);
+      font-size:11px; font-weight:500; white-space:nowrap;
+    }
+    .tab-item svg { width:22px; height:22px; }
+    .tab-item.active { color: var(--accent); background: rgba(79,70,229,.1); }
+    .dark .tab-item.active { background: rgba(129,140,248,.15); }
+    .tab-item:not(.active):hover { background: rgba(0,0,0,.05); }
+    .dark .tab-item:not(.active):hover { background: rgba(255,255,255,.05); }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius:16px; padding:20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    }
+    .dark .card { box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+
+    /* ── Icon button ── */
+    .icon-btn {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:36px; height:36px; border-radius:10px; cursor:pointer;
+      transition:background .15s; color: var(--muted);
+    }
+    .icon-btn:hover { background: rgba(0,0,0,.07); }
+    .dark .icon-btn:hover { background: rgba(255,255,255,.1); }
+    .icon-btn svg { width:20px; height:20px; }
+
+    /* ── Timetable ── */
+    .tt-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .tt-grid {
+      display:grid;
+      grid-template-columns: 52px repeat(5,1fr);
+      min-width:520px;
+    }
+    .tt-head-cell {
+      padding:8px 4px; text-align:center; font-size:12px; font-weight:700;
+      border-bottom:2px solid var(--border); color:var(--muted); letter-spacing:.05em;
+    }
+    .tt-head-cell.today { color:var(--accent); border-bottom-color:var(--accent); }
+    .tt-time-col { display:flex; flex-direction:column; }
+    .tt-hour-label {
+      height: var(--px-hour); display:flex; align-items:flex-start;
+      justify-content:flex-end; padding-right:8px;
+      font-size:10px; color:var(--muted); padding-top:2px; flex-shrink:0;
+    }
+    .tt-day-col { position:relative; border-left:1px solid var(--border); }
+    .tt-body-row { height: var(--px-hour); border-bottom:1px dashed var(--border); }
+
+    /* Course block */
+    .tt-block {
+      position:absolute; left:2px; right:2px;
+      border-radius:8px; padding:4px 7px; overflow:hidden;
+      cursor:pointer; border-left:3px solid transparent;
+      transition:transform .12s, box-shadow .12s, filter .12s;
+      font-size:11px; line-height:1.35;
+    }
+    .tt-block:hover {
+      transform:scale(1.03) translateY(-1px);
+      box-shadow:0 6px 16px rgba(0,0,0,.18);
+      z-index:20; filter:brightness(1.05);
+    }
+
+    /* Room colour palette */
+    .room-E117 { background:#dbeafe; border-color:#3b82f6; color:#1e3a8a; }
+    .room-E118 { background:#dcfce7; border-color:#22c55e; color:#14532d; }
+    .room-E211 { background:#f3e8ff; border-color:#a855f7; color:#581c87; }
+    .room-E212 { background:#fef9c3; border-color:#eab308; color:#713f12; }
+    .room-B301 { background:#fee2e2; border-color:#ef4444; color:#7f1d1d; }
+    .room-D202 { background:#e0e7ff; border-color:#6366f1; color:#1e1b4b; }
+    .room-C401 { background:#ccfbf1; border-color:#14b8a6; color:#134e4a; }
+    .room-other{ background:#f1f5f9; border-color:#94a3b8; color:#334155; }
+
+    .dark .room-E117 { background:#1e3a5f; border-color:#60a5fa; color:#bfdbfe; }
+    .dark .room-E118 { background:#14532d; border-color:#4ade80; color:#bbf7d0; }
+    .dark .room-E211 { background:#3b0764; border-color:#c084fc; color:#e9d5ff; }
+    .dark .room-E212 { background:#422006; border-color:#facc15; color:#fef08a; }
+    .dark .room-B301 { background:#450a0a; border-color:#f87171; color:#fecaca; }
+    .dark .room-D202 { background:#1e1b4b; border-color:#818cf8; color:#c7d2fe; }
+    .dark .room-C401 { background:#042f2e; border-color:#2dd4bf; color:#99f6e4; }
+    .dark .room-other{ background:#1e293b; border-color:#475569; color:#cbd5e1; }
+
+    /* ── Gantt modal ── */
+    .gantt-bar {
+      position:absolute; height:36px; border-radius:8px;
+      display:flex; align-items:center; padding:0 10px;
+      font-size:11px; overflow:hidden; cursor:pointer; white-space:nowrap;
+      transition:filter .12s, box-shadow .12s;
+    }
+    .gantt-bar:hover { filter:brightness(1.06); box-shadow:0 4px 12px rgba(0,0,0,.2); z-index:5; }
+
+    /* ── Notification drawer ── */
     .notif-drawer {
-      position:fixed; top:0; right:0; height:100vh; width:340px;
-      background:white; box-shadow:-4px 0 20px rgba(0,0,0,.12);
+      position:fixed; top:0; right:0; height:100vh; width:320px;
+      background:var(--surface); border-left:1px solid var(--border);
+      box-shadow:-8px 0 32px rgba(0,0,0,.12);
       z-index:200; transform:translateX(100%); transition:transform .25s ease;
+      display:flex; flex-direction:column;
     }
     .notif-drawer.open { transform:translateX(0); }
+
+    /* ── Badge ── */
+    .badge {
+      position:absolute; top:-2px; right:-2px;
+      min-width:16px; height:16px; border-radius:8px;
+      background:#ef4444; color:#fff; font-size:9px; font-weight:700;
+      display:none; align-items:center; justify-content:center;
+      padding:0 3px;
+    }
+    .badge.show { display:flex; }
+
+    /* ── Scroll area ── */
+    .scroll-area { overflow-y:auto; }
+    .scroll-area::-webkit-scrollbar { width:4px; }
+    .scroll-area::-webkit-scrollbar-track { background:transparent; }
+    .scroll-area::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
   </style>
 </head>
-<body class="bg-slate-100 min-h-screen font-sans">
 
-<!-- ── LOGIN ──────────────────────────────────────────────────────── -->
+<body class="text-slate-800 dark:text-slate-100 min-h-screen font-sans">
+
+<!-- ────────────────────────────────── LOGIN ── -->
 <section id="loginSection" class="flex items-center justify-center min-h-screen px-4">
-  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm fade-in">
-    <div class="text-center mb-8">
-      <div class="text-4xl mb-2">🏫</div>
-      <h1 class="text-xl font-bold text-gray-800">學生個人管理系統</h1>
-      <p class="text-xs text-gray-400 mt-1">選課 · 借教室 · 教室排程</p>
+  <div class="card w-full max-w-sm fade-in">
+    <!-- dark mode toggle on login -->
+    <div class="flex justify-end mb-4">
+      <button onclick="toggleDark()" class="icon-btn" title="切換深色模式">
+        <svg id="loginThemeIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+        </svg>
+      </button>
     </div>
-    <div id="loginAlert" class="hidden mb-4 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-600 border border-red-100"></div>
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-9 h-9 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-800 dark:text-slate-100">學生個人管理系統</h1>
+      <p class="text-sm text-slate-400 mt-1">選課 · 借教室 · 課表排程</p>
+    </div>
+    <div id="loginAlert" class="hidden mb-4 px-4 py-3 rounded-xl text-sm bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800"></div>
     <form id="loginForm" class="space-y-4">
       <div>
-        <label class="block text-sm font-medium text-gray-600 mb-1">學號</label>
+        <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">學號</label>
         <input id="sidInput" type="text" autocomplete="username"
-          class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:focus:ring-indigo-500 placeholder-slate-400 dark:text-slate-100"
           placeholder="請輸入學號" />
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-600 mb-1">密碼</label>
+        <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">密碼</label>
         <input id="passwordInput" type="password" autocomplete="current-password"
-          class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:focus:ring-indigo-500 placeholder-slate-400 dark:text-slate-100"
           placeholder="請輸入密碼" />
       </div>
       <button type="submit"
-        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+        class="w-full bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-semibold py-2.5 rounded-xl transition text-sm shadow-sm">
         登入
       </button>
     </form>
   </div>
 </section>
 
-<!-- ── DASHBOARD ──────────────────────────────────────────────────── -->
-<section id="dashboardSection" class="hidden min-h-screen">
+<!-- ────────────────────────────────── DASHBOARD ── -->
+<div id="dashboardSection" class="hidden flex flex-col min-h-screen">
 
   <!-- Navbar -->
-  <nav class="bg-indigo-600 text-white px-5 py-3 flex justify-between items-center shadow-md sticky top-0 z-30">
-    <div class="flex items-center gap-2">
-      <span class="text-lg">🏫</span>
-      <span class="font-bold text-sm">學生個人管理系統</span>
+  <nav class="bg-indigo-600 dark:bg-slate-800 border-b border-indigo-500/30 dark:border-slate-700 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
+    <div class="flex items-center gap-2.5">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-white opacity-90" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/>
+      </svg>
+      <span class="font-bold text-white text-sm sm:text-base tracking-wide">學生個人管理系統</span>
     </div>
-    <div class="flex items-center gap-3">
-      <span id="navUser" class="text-xs opacity-80 hidden sm:block"></span>
-      <!-- Notification bell -->
-      <button onclick="toggleNotifDrawer()" class="relative p-1">
-        <span class="text-lg">🔔</span>
-        <span id="notifBadge" class="hidden absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold"></span>
+    <div class="flex items-center gap-1">
+      <!-- Dark mode toggle -->
+      <button onclick="toggleDark()" class="icon-btn text-white/80 hover:!bg-white/20" title="深色模式">
+        <svg id="themeIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+        </svg>
       </button>
+      <!-- Notification bell -->
+      <button onclick="toggleNotifDrawer()" class="icon-btn relative text-white/80 hover:!bg-white/20" title="通知">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+        </svg>
+        <span id="notifBadge" class="badge"></span>
+      </button>
+      <!-- User + logout -->
+      <span id="navUser" class="text-xs text-white/70 hidden sm:block px-1"></span>
       <button onclick="handleLogout()"
-        class="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg transition">
-        登出
+        class="flex items-center gap-1.5 text-xs text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition ml-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
+        </svg>
+        <span class="hidden sm:inline">登出</span>
       </button>
     </div>
   </nav>
 
   <!-- Tab bar -->
-  <div class="bg-white border-b sticky top-[52px] z-20 px-4">
-    <div class="max-w-4xl mx-auto flex gap-1 py-2 overflow-x-auto">
-      <button class="tab-btn active" id="tab-status"   onclick="switchTab('status')">我的狀態</button>
-      <button class="tab-btn"        id="tab-enroll"   onclick="switchTab('enroll')">選課</button>
-      <button class="tab-btn"        id="tab-borrow"   onclick="switchTab('borrow')">借教室</button>
-      <button class="tab-btn"        id="tab-gantt"    onclick="switchTab('gantt')">教室甘特圖</button>
-      <button class="tab-btn"        id="tab-settings" onclick="switchTab('settings')">設定</button>
+  <div class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-[52px] z-20">
+    <div class="max-w-4xl mx-auto px-3 flex gap-1 py-1.5 overflow-x-auto">
+      <!-- 我的狀態 -->
+      <button id="tab-status" class="tab-item active" onclick="switchTab('status')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>
+        我的狀態
+      </button>
+      <!-- 選課 -->
+      <button id="tab-enroll" class="tab-item" onclick="switchTab('enroll')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+        選課
+      </button>
+      <!-- 借教室 -->
+      <button id="tab-borrow" class="tab-item" onclick="switchTab('borrow')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+        借教室
+      </button>
+      <!-- 課表 -->
+      <button id="tab-timetable" class="tab-item" onclick="switchTab('timetable')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z"/></svg>
+        課表
+      </button>
+      <!-- 設定 -->
+      <button id="tab-settings" class="tab-item" onclick="switchTab('settings')">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        設定
+      </button>
     </div>
   </div>
 
   <!-- Toast -->
-  <div id="toast" class="hidden fixed top-16 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium fade-in max-w-xs text-center pointer-events-none"></div>
+  <div id="toast" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-medium fade-in max-w-xs text-center pointer-events-none"></div>
 
-  <div class="max-w-4xl mx-auto px-4 py-5">
+  <!-- Content -->
+  <main class="flex-1 overflow-auto">
+    <div class="max-w-4xl mx-auto px-4 py-5 space-y-4">
 
-    <!-- ══ TAB: 我的狀態 ══════════════════════════════════════════ -->
-    <div id="page-status" class="space-y-5 fade-in">
-
-      <!-- 我的借用狀態 -->
-      <div class="bg-white rounded-2xl shadow p-5">
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">我的借用狀態</h2>
-        <div id="statusCard"><div class="h-12 bg-gray-100 rounded-xl animate-pulse"></div></div>
-        <div id="returnBtnWrap" class="hidden mt-3">
-          <button onclick="handleReturn()"
-            class="bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold px-5 py-2 rounded-xl transition">
-            歸還教室
-          </button>
-        </div>
-      </div>
-
-      <!-- 修課教室借用狀況 -->
-      <div class="bg-white rounded-2xl shadow p-5">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">修課教室借用狀況</h2>
-          <button onclick="loadMyRoomBorrows()" class="text-xs text-indigo-500 hover:underline">重整</button>
-        </div>
-        <div id="myRoomBorrows"><div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div></div>
-      </div>
-
-    </div>
-
-    <!-- ══ TAB: 選課 ══════════════════════════════════════════════ -->
-    <div id="page-enroll" class="hidden space-y-5 fade-in">
-
-      <!-- 我的修課清單 -->
-      <div class="bg-white rounded-2xl shadow p-5">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">已選課程</h2>
-          <button onclick="loadMyCourses()" class="text-xs text-indigo-500 hover:underline">重整</button>
-        </div>
-        <div id="myCourses"><div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div></div>
-      </div>
-
-      <!-- 可選課程 -->
-      <div class="bg-white rounded-2xl shadow p-5">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">可加選課程</h2>
-          <button onclick="loadAvailableCourses()" class="text-xs text-indigo-500 hover:underline">重整</button>
-        </div>
-        <div id="availCourses"><div class="h-8 bg-gray-100 rounded-xl animate-pulse"></div></div>
-      </div>
-
-    </div>
-
-    <!-- ══ TAB: 借教室 ════════════════════════════════════════════ -->
-    <div id="page-borrow" class="hidden space-y-5 fade-in">
-      <div class="bg-white rounded-2xl shadow p-5">
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">借教室</h2>
-        <p class="text-xs text-gray-400 mb-3">點擊下方已選課程可自動填入表單</p>
-        <div id="borrowQuickList" class="mb-4"></div>
-        <form id="borrowForm" class="space-y-3">
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">課程編號</label>
-              <input id="cnoInput" type="text"
-                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                placeholder="例：1374" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-600 mb-1">教室</label>
-              <input id="roomInput" type="text"
-                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                placeholder="例：E117" />
-            </div>
+      <!-- ══ 我的狀態 ══ -->
+      <div id="page-status" class="space-y-4 fade-in">
+        <div class="card">
+          <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">我的借用狀態</p>
+          <div id="statusCard"><div class="h-14 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse"></div></div>
+          <div id="returnBtnWrap" class="hidden mt-3">
+            <button onclick="handleReturn()"
+              class="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold px-5 py-2 rounded-xl transition shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/></svg>
+              歸還教室
+            </button>
           </div>
-          <button type="submit"
-            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition text-sm">
-            借教室
-          </button>
-        </form>
-      </div>
-    </div>
+        </div>
 
-    <!-- ══ TAB: 甘特圖 ════════════════════════════════════════════ -->
-    <div id="page-gantt" class="hidden space-y-5 fade-in">
-      <div class="bg-white rounded-2xl shadow p-5">
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">教室甘特圖</h2>
-        <div class="flex flex-wrap gap-3 items-end mb-4">
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">選擇課程（查看該教室排程）</label>
-            <select id="ganttCourseSelect"
-              class="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 min-w-[220px]">
-              <option value="">— 請選擇課程 —</option>
-            </select>
+        <div class="card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">修課教室借用狀況</p>
+            <button onclick="loadMyRoomBorrows()" class="icon-btn" title="重整">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+            </button>
           </div>
-          <button onclick="loadGantt()"
-            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">
-            查看
-          </button>
-        </div>
-
-        <!-- Legend -->
-        <div class="flex flex-wrap gap-3 mb-4 text-xs">
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-300 inline-block"></span>空閒</span>
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-indigo-400 inline-block"></span>我借用中</span>
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-300 inline-block"></span>他人借用中</span>
-          <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-rose-400 inline-block"></span>可強制歸還</span>
-        </div>
-
-        <!-- Gantt chart area -->
-        <div id="ganttWrap" class="overflow-x-auto">
-          <p class="text-gray-400 text-sm">請選擇課程查看排程</p>
-        </div>
-
-        <!-- Detail panel -->
-        <div id="ganttDetail" class="hidden mt-4 bg-slate-50 rounded-xl p-4 text-sm space-y-1"></div>
-      </div>
-    </div>
-
-    <!-- ══ TAB: 設定 ══════════════════════════════════════════════ -->
-    <div id="page-settings" class="hidden fade-in">
-      <div class="bg-white rounded-2xl shadow p-5">
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">更改密碼</h2>
-        <div class="space-y-3 max-w-sm">
-          <input id="newPwInput" type="password"
-            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            placeholder="請輸入新密碼" />
-          <button onclick="handleChangePw()"
-            class="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-6 rounded-xl transition text-sm">
-            更新密碼
-          </button>
+          <div id="myRoomBorrows"><div class="h-8 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse"></div></div>
         </div>
       </div>
+
+      <!-- ══ 選課 ══ -->
+      <div id="page-enroll" class="hidden space-y-4 fade-in">
+        <div class="card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">已選課程</p>
+            <button onclick="loadMyCourses()" class="icon-btn" title="重整">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+            </button>
+          </div>
+          <div id="myCourses"><div class="h-8 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse"></div></div>
+        </div>
+        <div class="card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">可加選課程</p>
+            <button onclick="loadAvailableCourses()" class="icon-btn" title="重整">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+            </button>
+          </div>
+          <div id="availCourses"><div class="h-8 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse"></div></div>
+        </div>
+      </div>
+
+      <!-- ══ 借教室 ══ -->
+      <div id="page-borrow" class="hidden space-y-4 fade-in">
+        <div class="card">
+          <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">快速選擇課程</p>
+          <div id="borrowQuickList" class="mb-4"></div>
+          <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">手動輸入</p>
+          <form id="borrowForm" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">課程編號</label>
+                <input id="cnoInput" type="text"
+                  class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-slate-100 placeholder-slate-400"
+                  placeholder="例：1374" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">教室</label>
+                <input id="roomInput" type="text"
+                  class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-slate-100 placeholder-slate-400"
+                  placeholder="例：E117" />
+              </div>
+            </div>
+            <button type="submit"
+              class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-semibold py-2 px-5 rounded-xl transition text-sm shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+              借教室
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- ══ 課表 ══ -->
+      <div id="page-timetable" class="hidden fade-in">
+        <div class="card">
+          <div class="flex items-center justify-between mb-4">
+            <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">每週課程表</p>
+            <button onclick="loadTimetable()" class="icon-btn" title="重整">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+            </button>
+          </div>
+          <!-- Legend -->
+          <div class="flex flex-wrap gap-x-4 gap-y-1.5 mb-4 text-xs text-slate-500 dark:text-slate-400">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-blue-200 dark:bg-blue-800 border-l-2 border-blue-500 inline-block"></span>E117</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-green-200 dark:bg-green-800 border-l-2 border-green-500 inline-block"></span>E118</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-purple-200 dark:bg-purple-800 border-l-2 border-purple-500 inline-block"></span>E211</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-yellow-200 dark:bg-yellow-800 border-l-2 border-yellow-500 inline-block"></span>E212</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-red-200 dark:bg-red-800 border-l-2 border-red-500 inline-block"></span>B301</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-indigo-200 dark:bg-indigo-800 border-l-2 border-indigo-500 inline-block"></span>D202</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-teal-200 dark:bg-teal-800 border-l-2 border-teal-500 inline-block"></span>C401</span>
+            <span class="flex items-center gap-1.5 ml-2 text-slate-400">點擊課程查看教室甘特圖</span>
+          </div>
+          <div id="timetableWrap">
+            <div class="h-32 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ 設定 ══ -->
+      <div id="page-settings" class="hidden fade-in">
+        <div class="card max-w-sm">
+          <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4">更改密碼</p>
+          <div class="space-y-3">
+            <input id="newPwInput" type="password"
+              class="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:text-slate-100 placeholder-slate-400"
+              placeholder="請輸入新密碼" />
+            <button onclick="handleChangePw()"
+              class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-5 rounded-xl transition text-sm shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+              更新密碼
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
+  </main>
+</div>
 
-  </div><!-- /max-w-4xl -->
-</section>
-
-<!-- ── KEY MODAL ──────────────────────────────────────────────────── -->
-<div id="keyModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center fade-in">
-    <div class="text-4xl mb-3">🎉</div>
-    <h3 class="text-lg font-bold text-gray-800 mb-1">借教室成功！</h3>
-    <p class="text-sm text-gray-500 mb-4">請妥善保存以下密碼，盡快前往使用</p>
-    <div class="bg-indigo-50 rounded-xl py-4 px-6 mb-5">
+<!-- ────────────────────────────────── KEY MODAL ── -->
+<div id="keyModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+  <div class="card w-full max-w-sm text-center fade-in shadow-2xl">
+    <div class="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/40 rounded-2xl flex items-center justify-center mx-auto mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    </div>
+    <h3 class="text-lg font-bold mb-1">借教室成功！</h3>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">請妥善保存以下密碼，盡快前往使用</p>
+    <div class="bg-indigo-50 dark:bg-indigo-900/40 rounded-2xl py-4 px-6 mb-5 border border-indigo-200 dark:border-indigo-800">
       <p class="text-xs text-indigo-400 mb-1">教室密碼</p>
-      <p id="keyDisplay" class="text-2xl font-mono font-bold text-indigo-700 tracking-widest"></p>
+      <p id="keyDisplay" class="text-2xl font-mono font-bold text-indigo-700 dark:text-indigo-300 tracking-widest"></p>
     </div>
     <button onclick="closeKeyModal()"
-      class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+      class="w-full bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-semibold py-2.5 rounded-xl transition text-sm">
       確認
     </button>
   </div>
 </div>
 
-<!-- ── NOTIFICATION DRAWER ────────────────────────────────────────── -->
-<div id="notifOverlay" class="hidden fixed inset-0 z-40 bg-black/20" onclick="toggleNotifDrawer()"></div>
-<div id="notifDrawer" class="notif-drawer flex flex-col">
-  <div class="flex items-center justify-between px-5 py-4 border-b">
-    <h3 class="font-bold text-gray-700">通知</h3>
-    <div class="flex items-center gap-3">
-      <button onclick="markAllRead()" class="text-xs text-indigo-500 hover:underline">全部已讀</button>
-      <button onclick="toggleNotifDrawer()" class="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+<!-- ────────────────────────────────── GANTT MODAL ── -->
+<div id="ganttModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+  <div class="card w-full max-w-2xl fade-in shadow-2xl max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between mb-4 flex-shrink-0">
+      <div>
+        <h3 id="ganttModalTitle" class="font-bold text-lg"></h3>
+        <p id="ganttModalSub" class="text-xs text-slate-400 dark:text-slate-500 mt-0.5"></p>
+      </div>
+      <button onclick="closeGanttModal()" class="icon-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <!-- Legend -->
+    <div class="flex flex-wrap gap-3 mb-4 text-xs flex-shrink-0">
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-200 inline-block"></span>空閒</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-indigo-400 inline-block"></span>我借用中</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-300 inline-block"></span>他人借用中</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-rose-400 inline-block"></span>可強制歸還</span>
+    </div>
+    <div class="overflow-x-auto flex-1">
+      <div id="ganttModalBody" class="min-w-[480px]"></div>
+    </div>
+    <!-- Detail panel -->
+    <div id="ganttDetail" class="hidden mt-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-sm space-y-1 flex-shrink-0"></div>
+  </div>
+</div>
+
+<!-- ────────────────────────────────── NOTIF DRAWER ── -->
+<div id="notifOverlay" class="hidden fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onclick="toggleNotifDrawer()"></div>
+<div id="notifDrawer" class="notif-drawer">
+  <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+    <h3 class="font-bold">通知</h3>
+    <div class="flex items-center gap-2">
+      <button onclick="markAllRead()" class="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400">全部已讀</button>
+      <button onclick="toggleNotifDrawer()" class="icon-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
     </div>
   </div>
-  <div id="notifList" class="flex-1 overflow-y-auto p-4 space-y-2">
-    <p class="text-gray-400 text-sm text-center mt-8">載入中...</p>
+  <div id="notifList" class="flex-1 scroll-area p-4 space-y-2">
+    <p class="text-slate-400 text-sm text-center mt-8">載入中...</p>
   </div>
 </div>
 

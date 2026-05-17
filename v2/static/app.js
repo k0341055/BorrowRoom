@@ -1,9 +1,50 @@
-// ── State ─────────────────────────────────────────────────────────────────────
-let token = localStorage.getItem('token');
+// ── Constants ──────────────────────────────────────────────────────────────────
+const PX_HOUR     = 64;          // must match --px-hour in CSS
+const TT_START    = 8 * 60;      // 08:00 in minutes
+const TT_HOURS    = 13;          // rows: 08:00 – 20:00 (13 labels)
+const GANTT_START = 8 * 60;      // 08:00
+const GANTT_END   = 21 * 60;     // 21:00
+const GANTT_RANGE = GANTT_END - GANTT_START; // 780 min
+const DAYS        = ['週一', '週二', '週三', '週四', '週五'];
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let token       = localStorage.getItem('token');
 let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
 let notifPollTimer = null;
 
-// ── API ───────────────────────────────────────────────────────────────────────
+// ── Dark mode ──────────────────────────────────────────────────────────────────
+const MOON_PATH = `<path stroke-linecap="round" stroke-linejoin="round"
+  d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75
+     0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21
+     12.75 21a9.753 9.753 0 009.002-5.998z"/>`;
+const SUN_PATH = `<path stroke-linecap="round" stroke-linejoin="round"
+  d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591
+     M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636
+     5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>`;
+
+function updateThemeIcons(isDark) {
+  ['themeIcon', 'loginThemeIcon'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = isDark ? SUN_PATH : MOON_PATH;
+  });
+}
+
+function toggleDark() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  updateThemeIcons(isDark);
+}
+
+// Apply saved / preferred theme immediately
+(function initTheme() {
+  const saved = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = saved ? saved === 'dark' : prefersDark;
+  if (isDark) document.documentElement.classList.add('dark');
+  updateThemeIcons(isDark);
+})();
+
+// ── API ────────────────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -15,13 +56,14 @@ async function api(path, opts = {}) {
   return data;
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────────────────────
 let _toastTimer;
 function toast(msg, type = 'error') {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = [
-    'fixed top-16 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium fade-in max-w-xs text-center pointer-events-none',
+    'fixed top-20 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm',
+    'font-medium fade-in max-w-xs text-center pointer-events-none',
     type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white',
   ].join(' ');
   el.classList.remove('hidden');
@@ -29,26 +71,28 @@ function toast(msg, type = 'error') {
   _toastTimer = setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
-const TABS = ['status', 'enroll', 'borrow', 'gantt', 'settings'];
+// ── Page helpers ───────────────────────────────────────────────────────────────
+function showPage(page) {
+  document.getElementById('loginSection').classList.toggle('hidden', page !== 'login');
+  document.getElementById('dashboardSection').classList.toggle('hidden', page !== 'dashboard');
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+const TABS = ['status', 'enroll', 'borrow', 'timetable', 'settings'];
+
 function switchTab(name) {
   TABS.forEach(t => {
     document.getElementById('page-' + t).classList.toggle('hidden', t !== name);
     document.getElementById('tab-' + t).classList.toggle('active', t === name);
   });
   window.location.hash = name;
-  if (name === 'status')   { loadStatus(); loadMyRoomBorrows(); }
-  if (name === 'enroll')   { loadMyCourses(); loadAvailableCourses(); }
-  if (name === 'borrow')   { loadBorrowQuickList(); }
-  if (name === 'gantt')    { loadGanttSelect(); }
+  if (name === 'status')    { loadStatus(); loadMyRoomBorrows(); }
+  if (name === 'enroll')    { loadMyCourses(); loadAvailableCourses(); }
+  if (name === 'borrow')    { loadBorrowQuickList(); }
+  if (name === 'timetable') { loadTimetable(); }
 }
 
-function showPage(page) {
-  document.getElementById('loginSection').classList.toggle('hidden', page !== 'login');
-  document.getElementById('dashboardSection').classList.toggle('hidden', page !== 'dashboard');
-}
-
-// ── Status tab ────────────────────────────────────────────────────────────────
+// ── Status tab ─────────────────────────────────────────────────────────────────
 async function loadStatus() {
   try {
     const { borrow } = await api('/borrow/me');
@@ -61,21 +105,22 @@ function renderStatusCard(borrow) {
   const btn  = document.getElementById('returnBtnWrap');
   if (borrow) {
     card.innerHTML = `
-      <div class="flex items-center gap-3 bg-indigo-50 rounded-xl p-4">
-        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0"></span>
+      <div class="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl p-4 border border-indigo-100 dark:border-indigo-800/50">
+        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0 animate-pulse"></span>
         <div>
-          <p class="font-semibold text-indigo-700 text-sm">借用中</p>
-          <p class="text-xs text-gray-500 mt-0.5">
+          <p class="font-semibold text-indigo-700 dark:text-indigo-300 text-sm">借用中</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             課程：${borrow.c_no}（${borrow.title}）&nbsp;｜&nbsp; 教室：<strong>${borrow.room}</strong>
+            &nbsp;｜&nbsp; ${formatTimeRange(borrow.time, borrow.credits)}
           </p>
         </div>
       </div>`;
     btn.classList.remove('hidden');
   } else {
     card.innerHTML = `
-      <div class="flex items-center gap-3 bg-gray-50 rounded-xl p-4">
-        <span class="w-2.5 h-2.5 rounded-full bg-gray-300 shrink-0"></span>
-        <p class="text-gray-400 text-sm">目前沒有借用任何教室</p>
+      <div class="flex items-center gap-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl p-4">
+        <span class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-500 shrink-0"></span>
+        <p class="text-slate-400 dark:text-slate-500 text-sm">目前沒有借用任何教室</p>
       </div>`;
     btn.classList.add('hidden');
   }
@@ -86,27 +131,29 @@ async function loadMyRoomBorrows() {
   try {
     const { borrows } = await api('/borrows/my-rooms');
     if (!borrows.length) {
-      el.innerHTML = '<p class="text-gray-400 text-sm">修課的教室目前無人借用</p>';
+      el.innerHTML = '<p class="text-slate-400 dark:text-slate-500 text-sm">修課的教室目前無人借用</p>';
       return;
     }
     el.innerHTML = `
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
-          <thead><tr class="border-b border-gray-100">
-            <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">教室</th>
-            <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">課程</th>
-            <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">上課時段</th>
-            <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">借用者</th>
-            <th class="pb-2 text-left text-xs text-gray-400 font-medium">學號</th>
+          <thead><tr class="border-b border-slate-100 dark:border-slate-700">
+            <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">教室</th>
+            <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">課程</th>
+            <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">上課時段</th>
+            <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">借用者</th>
+            <th class="pb-2 text-left text-xs text-slate-400 font-medium">學號</th>
           </tr></thead>
-          <tbody class="divide-y divide-gray-50">
+          <tbody class="divide-y divide-slate-50 dark:divide-slate-700/50">
             ${borrows.map(b => `
-              <tr class="${b.lend_sid === currentUser?.sid ? 'bg-indigo-50' : 'hover:bg-gray-50'}">
-                <td class="py-2 pr-3 font-semibold text-indigo-600">${b.room}</td>
-                <td class="py-2 pr-3 text-gray-700">${b.title}</td>
-                <td class="py-2 pr-3 text-gray-500">${formatTimeRange(b.time, b.credits)}</td>
-                <td class="py-2 pr-3">${b.lend_name}</td>
-                <td class="py-2 text-gray-400 text-xs">${b.lend_sid}</td>
+              <tr class="${b.lend_sid === currentUser?.sid
+                ? 'bg-indigo-50 dark:bg-indigo-900/20'
+                : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}">
+                <td class="py-2 pr-3 font-semibold text-indigo-600 dark:text-indigo-400">${b.room}</td>
+                <td class="py-2 pr-3 text-slate-700 dark:text-slate-200">${b.title}</td>
+                <td class="py-2 pr-3 text-slate-500 dark:text-slate-400 text-xs">${formatTimeRange(b.time, b.credits)}</td>
+                <td class="py-2 pr-3 dark:text-slate-200">${b.lend_name}</td>
+                <td class="py-2 text-slate-400 text-xs">${b.lend_sid}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -116,12 +163,12 @@ async function loadMyRoomBorrows() {
   }
 }
 
-// ── Enroll tab ────────────────────────────────────────────────────────────────
+// ── Enroll tab ─────────────────────────────────────────────────────────────────
 async function loadMyCourses() {
   const el = document.getElementById('myCourses');
   try {
     const { courses } = await api('/courses/me');
-    if (!courses.length) { el.innerHTML = '<p class="text-gray-400 text-sm">尚未選課</p>'; return; }
+    if (!courses.length) { el.innerHTML = '<p class="text-slate-400 dark:text-slate-500 text-sm">尚未選課</p>'; return; }
     el.innerHTML = courseTable(courses, true);
   } catch { el.innerHTML = '<p class="text-red-400 text-sm">載入失敗</p>'; }
 }
@@ -130,7 +177,7 @@ async function loadAvailableCourses() {
   const el = document.getElementById('availCourses');
   try {
     const { courses } = await api('/courses/available');
-    if (!courses.length) { el.innerHTML = '<p class="text-gray-400 text-sm">無可加選課程</p>'; return; }
+    if (!courses.length) { el.innerHTML = '<p class="text-slate-400 dark:text-slate-500 text-sm">無可加選課程</p>'; return; }
     el.innerHTML = courseTable(courses, false);
   } catch { el.innerHTML = '<p class="text-red-400 text-sm">載入失敗</p>'; }
 }
@@ -139,28 +186,28 @@ function courseTable(courses, enrolled) {
   return `
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
-        <thead><tr class="border-b border-gray-100">
-          <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">課號</th>
-          <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">課程名稱</th>
-          <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">時段</th>
-          <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">教室</th>
-          <th class="pb-2 pr-3 text-left text-xs text-gray-400 font-medium">學分</th>
+        <thead><tr class="border-b border-slate-100 dark:border-slate-700">
+          <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">課號</th>
+          <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">課程名稱</th>
+          <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">時段</th>
+          <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">教室</th>
+          <th class="pb-2 pr-3 text-left text-xs text-slate-400 font-medium">學分</th>
           <th class="pb-2"></th>
         </tr></thead>
-        <tbody class="divide-y divide-gray-50">
+        <tbody class="divide-y divide-slate-50 dark:divide-slate-700/50">
           ${courses.map(c => `
-            <tr class="hover:bg-gray-50">
-              <td class="py-2 pr-3 font-mono text-indigo-600">${c.c_no}</td>
-              <td class="py-2 pr-3">${c.title}</td>
-              <td class="py-2 pr-3 text-gray-500 text-xs">${formatTimeRange(c.time, c.credits)}</td>
-              <td class="py-2 pr-3 font-semibold">${c.room}</td>
-              <td class="py-2 pr-3 text-center">${c.credits}</td>
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+              <td class="py-2 pr-3 font-mono text-indigo-600 dark:text-indigo-400">${c.c_no}</td>
+              <td class="py-2 pr-3 dark:text-slate-200">${c.title}</td>
+              <td class="py-2 pr-3 text-slate-500 dark:text-slate-400 text-xs">${formatTimeRange(c.time, c.credits)}</td>
+              <td class="py-2 pr-3 font-semibold dark:text-slate-200">${c.room}</td>
+              <td class="py-2 pr-3 text-center dark:text-slate-300">${c.credits}</td>
               <td class="py-2">
                 ${enrolled
                   ? `<button onclick="handleDrop('${c.c_no}')"
-                       class="text-xs bg-red-50 hover:bg-red-100 text-red-500 px-2 py-1 rounded-lg transition">退選</button>`
+                       class="text-xs bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-500 dark:text-red-400 px-2 py-1 rounded-lg transition">退選</button>`
                   : `<button onclick="handleEnroll('${c.c_no}')"
-                       class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2 py-1 rounded-lg transition">加選</button>`
+                       class="text-xs bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg transition">加選</button>`
                 }
               </td>
             </tr>`).join('')}
@@ -174,7 +221,6 @@ async function handleEnroll(c_no) {
     await api('/enroll', { method: 'POST', body: JSON.stringify({ c_no }) });
     toast('選課成功', 'success');
     await Promise.all([loadMyCourses(), loadAvailableCourses()]);
-    loadGanttSelect();
   } catch (e) { toast(e.message); }
 }
 
@@ -184,11 +230,10 @@ async function handleDrop(c_no) {
     await api('/enroll/' + c_no, { method: 'DELETE' });
     toast('退選成功', 'success');
     await Promise.all([loadMyCourses(), loadAvailableCourses()]);
-    loadGanttSelect();
   } catch (e) { toast(e.message); }
 }
 
-// ── Borrow tab ────────────────────────────────────────────────────────────────
+// ── Borrow tab ─────────────────────────────────────────────────────────────────
 async function loadBorrowQuickList() {
   const el = document.getElementById('borrowQuickList');
   try {
@@ -197,8 +242,10 @@ async function loadBorrowQuickList() {
     el.innerHTML = `<div class="flex flex-wrap gap-2">
       ${courses.map(c =>
         `<button onclick="fillBorrowForm('${c.c_no}','${c.room}')"
-           class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition font-mono">
-           ${c.c_no} ${c.room}
+           class="text-xs bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50
+                  text-indigo-700 dark:text-indigo-300 px-3 py-1.5 rounded-xl transition font-mono border
+                  border-indigo-100 dark:border-indigo-800/50">
+           ${c.c_no} · ${c.room}
          </button>`
       ).join('')}
     </div>`;
@@ -225,7 +272,7 @@ document.getElementById('borrowForm').addEventListener('submit', async (e) => {
   } catch (e) { toast(e.message); }
 });
 
-// ── Return ────────────────────────────────────────────────────────────────────
+// ── Return ─────────────────────────────────────────────────────────────────────
 async function handleReturn() {
   if (!confirm('確定要歸還教室？')) return;
   try {
@@ -236,137 +283,179 @@ async function handleReturn() {
   } catch (e) { toast(e.message); }
 }
 
-// ── Gantt tab ─────────────────────────────────────────────────────────────────
-const GANTT_START_MIN = 8 * 60;   // 08:00 = 480 min
-const GANTT_END_MIN   = 21 * 60;  // 21:00 = 1260 min
-const GANTT_RANGE     = GANTT_END_MIN - GANTT_START_MIN; // 780 min
-
-function timeStrToMin(t) {
-  const parts = t.split(':').map(Number);
-  return parts[0] * 60 + parts[1];
-}
-
-function minToTimeStr(min) {
-  const h = Math.floor(min / 60).toString().padStart(2, '0');
-  const m = (min % 60).toString().padStart(2, '0');
-  return `${h}:${m}`;
-}
-
-function courseEndMin(timeStr, credits) {
-  return timeStrToMin(timeStr) + credits * 60 - 10;
-}
-
-function leftPct(timeStr)     { return ((timeStrToMin(timeStr) - GANTT_START_MIN) / GANTT_RANGE * 100).toFixed(2); }
-function widthPct(timeStr, credits) {
-  const dur = credits * 60 - 10;
-  return (dur / GANTT_RANGE * 100).toFixed(2);
-}
-
-async function loadGanttSelect() {
-  const sel = document.getElementById('ganttCourseSelect');
+// ── Timetable tab ──────────────────────────────────────────────────────────────
+async function loadTimetable() {
+  const wrap = document.getElementById('timetableWrap');
+  wrap.innerHTML = '<div class="h-32 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse"></div>';
   try {
     const { courses } = await api('/courses/me');
-    sel.innerHTML = '<option value="">— 請選擇課程 —</option>' +
-      courses.map(c =>
-        `<option value="${c.room}" data-cno="${c.c_no}">
-           ${c.c_no} ${c.title}（${c.room}）${formatTimeRange(c.time, c.credits)}
-         </option>`
-      ).join('');
-  } catch {}
-}
-
-async function loadGantt() {
-  const sel  = document.getElementById('ganttCourseSelect');
-  const room = sel.value;
-  if (!room) { toast('請先選擇課程'); return; }
-
-  const wrap = document.getElementById('ganttWrap');
-  wrap.innerHTML = '<div class="h-10 bg-gray-100 rounded-xl animate-pulse"></div>';
-  document.getElementById('ganttDetail').classList.add('hidden');
-
-  try {
-    const { schedule } = await api(`/rooms/${room}/schedule`);
-    renderGantt(room, schedule);
+    renderTimetable(courses);
   } catch (e) {
     wrap.innerHTML = `<p class="text-red-400 text-sm">${e.message}</p>`;
   }
 }
 
-function renderGantt(room, schedule) {
-  const wrap = document.getElementById('ganttWrap');
+function roomColorClass(room) {
+  const map = { E117:'room-E117', E118:'room-E118', E211:'room-E211',
+                E212:'room-E212', B301:'room-B301', D202:'room-D202', C401:'room-C401' };
+  return map[room] || 'room-other';
+}
 
-  // Build hour-tick ruler (08:00 – 21:00, 13 ticks)
-  const hours = [];
-  for (let h = 8; h <= 21; h++) hours.push(h);
-  const ticksHtml = hours.map(h => {
-    const left = ((h * 60 - GANTT_START_MIN) / GANTT_RANGE * 100).toFixed(2);
-    return `<div class="absolute top-0 bottom-0 border-l border-gray-200" style="left:${left}%">
-              <span class="absolute -top-5 -translate-x-1/2 text-[10px] text-gray-400">${h}:00</span>
+function renderTimetable(courses) {
+  const wrap = document.getElementById('timetableWrap');
+
+  // today: 1=Mon…5=Fri (0=Sun,6=Sat → no highlight)
+  const todayJS  = new Date().getDay();
+  const todayNum = todayJS >= 1 && todayJS <= 5 ? todayJS : 0;
+
+  // Group by weekday
+  const byDay = { 1:[], 2:[], 3:[], 4:[], 5:[] };
+  courses.forEach(c => { if (byDay[c.weekday]) byDay[c.weekday].push(c); });
+
+  // Hour-label column
+  const hourLabels = Array.from({ length: TT_HOURS }, (_, i) => {
+    const h = 8 + i;
+    return `<div class="tt-hour-label">${String(h).padStart(2,'0')}:00</div>`;
+  }).join('');
+
+  // Day column: grid-line rows + absolute course blocks
+  function buildDayCol(dayNum) {
+    const gridRows = Array.from({ length: TT_HOURS }, () =>
+      `<div class="tt-body-row"></div>`
+    ).join('');
+
+    const blocks = byDay[dayNum].map(c => {
+      const startMin = timeStrToMin(c.time);
+      const top      = (startMin - TT_START) / 60 * PX_HOUR;
+      const height   = Math.max((c.credits * 60 - 10) / 60 * PX_HOUR, 22);
+      const colorCls = roomColorClass(c.room);
+      const endStr   = minToTimeStr(startMin + c.credits * 60 - 10);
+      return `
+        <div class="tt-block ${colorCls}"
+             style="top:${top.toFixed(1)}px;height:${height.toFixed(1)}px"
+             onclick="openGanttModal('${c.room}',${c.weekday})"
+             title="${c.title}（${c.room}）${c.time.slice(0,5)}–${endStr}">
+          <div class="font-semibold truncate leading-tight">${c.title}</div>
+          <div class="opacity-60 text-[9px] truncate mt-0.5">${c.room} · ${c.time.slice(0,5)}</div>
+        </div>`;
+    }).join('');
+
+    return `<div class="tt-day-col">${gridRows}${blocks}</div>`;
+  }
+
+  const headerCells = `<div class="tt-head-cell"></div>` +
+    DAYS.map((d, i) => {
+      const dayNum  = i + 1;
+      const isToday = dayNum === todayNum;
+      return `<div class="tt-head-cell${isToday ? ' today' : ''}">${d}</div>`;
+    }).join('');
+
+  wrap.innerHTML = `
+    <div class="tt-wrap">
+      <div class="tt-grid">
+        ${headerCells}
+        <div class="tt-time-col">${hourLabels}</div>
+        ${[1,2,3,4,5].map(d => buildDayCol(d)).join('')}
+      </div>
+    </div>`;
+}
+
+// ── Gantt modal ────────────────────────────────────────────────────────────────
+async function openGanttModal(room, weekday) {
+  const modal = document.getElementById('ganttModal');
+  modal.classList.remove('hidden');
+  document.getElementById('ganttModalTitle').textContent = `${room} — ${DAYS[weekday - 1]}`;
+  document.getElementById('ganttModalSub').textContent   = '教室借用甘特圖';
+  document.getElementById('ganttModalBody').innerHTML    =
+    '<div class="h-10 bg-slate-100 dark:bg-slate-700 rounded-xl animate-pulse"></div>';
+  document.getElementById('ganttDetail').classList.add('hidden');
+
+  try {
+    const { schedule } = await api(`/rooms/${room}/schedule?weekday=${weekday}`);
+    renderGantt(schedule);
+  } catch (e) {
+    document.getElementById('ganttModalBody').innerHTML =
+      `<p class="text-red-400 text-sm">${e.message}</p>`;
+  }
+}
+
+function closeGanttModal() {
+  document.getElementById('ganttModal').classList.add('hidden');
+  document.getElementById('ganttDetail').classList.add('hidden');
+}
+
+// Close modal when clicking backdrop
+document.getElementById('ganttModal').addEventListener('click', function(e) {
+  if (e.target === this) closeGanttModal();
+});
+
+function renderGantt(schedule) {
+  const body = document.getElementById('ganttModalBody');
+  window._ganttSchedule = schedule;
+
+  if (!schedule.length) {
+    body.innerHTML = '<p class="text-slate-400 dark:text-slate-500 text-sm py-4">此教室當天無排課</p>';
+    return;
+  }
+
+  // Time ruler ticks
+  const ticksHtml = Array.from({ length: 14 }, (_, i) => {
+    const h    = 8 + i;
+    const left = ((h * 60 - GANTT_START) / GANTT_RANGE * 100).toFixed(2);
+    return `<div class="absolute top-0 bottom-0 border-l border-slate-200 dark:border-slate-600 pointer-events-none"
+                 style="left:${left}%">
+              <span class="absolute -top-5 -translate-x-1/2 text-[10px] text-slate-400">${h}:00</span>
             </div>`;
   }).join('');
 
-  // Build bars
+  // Gantt bars
   const barsHtml = schedule.map((c, idx) => {
-    const lsid = c.lend_sid;
-    const isMe = lsid === currentUser?.sid;
+    const lsid    = c.lend_sid;
+    const isMe    = lsid === currentUser?.sid;
     const occupied = lsid !== 'null';
 
-    let colorCls, label, titleHint;
+    let colorCls, labelPrefix, titleHint;
     if (!occupied) {
-      colorCls = 'bg-emerald-200 text-emerald-800 border border-emerald-300';
-      label = c.title;
-      titleHint = `${c.title} — 空閒`;
+      colorCls   = 'bg-emerald-200 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700';
+      labelPrefix = '';
+      titleHint  = `${c.title} — 空閒`;
     } else if (isMe) {
-      colorCls = 'bg-indigo-400 text-white border border-indigo-500';
-      label = '📌 ' + c.title;
-      titleHint = `${c.title} — 我借用中`;
+      colorCls   = 'bg-indigo-400 dark:bg-indigo-600 text-white border border-indigo-500';
+      labelPrefix = '📌 ';
+      titleHint  = `${c.title} — 我借用中`;
     } else if (c.can_force_return) {
-      colorCls = 'bg-rose-300 text-rose-900 border border-rose-400';
-      label = '⚠ ' + c.title;
-      titleHint = `${c.title} — ${c.lend_name} 借用中（可強制歸還）`;
+      colorCls   = 'bg-rose-300 dark:bg-rose-800/70 text-rose-900 dark:text-rose-200 border border-rose-400 dark:border-rose-700';
+      labelPrefix = '⚠ ';
+      titleHint  = `${c.title} — ${c.lend_name} 借用中（可強制歸還）`;
     } else {
-      colorCls = 'bg-amber-200 text-amber-900 border border-amber-300';
-      label = c.title;
-      titleHint = `${c.title} — ${c.lend_name} 借用中`;
+      colorCls   = 'bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-700';
+      labelPrefix = '';
+      titleHint  = `${c.title} — ${c.lend_name} 借用中`;
     }
 
-    const endMin = courseEndMin(c.time, c.credits);
-    const timeRange = `${c.time.slice(0,5)} – ${minToTimeStr(endMin)}`;
-
+    const lw = leftPct(c.time);
+    const ww = widthPct(c.time, c.credits);
     return `
       <div class="gantt-bar ${colorCls}"
-           style="left:${leftPct(c.time)}%;width:${widthPct(c.time, c.credits)}%"
+           style="left:${lw}%;width:${ww}%"
            title="${titleHint}"
            onclick="showGanttDetail(${idx})">
-        <span class="truncate text-[11px]">${label}</span>
-        ${c.can_force_return
-          ? `<button onclick="event.stopPropagation();handleForceReturn('${c.c_no}','${c.room}')"
-               class="ml-1 shrink-0 bg-rose-600 hover:bg-rose-700 text-white text-[10px] px-1.5 py-0.5 rounded font-semibold">
-               強制歸還
-             </button>`
-          : ''}
+        <span class="truncate text-[11px]">${labelPrefix}${c.title}</span>
+        ${c.can_force_return ? `
+          <button onclick="event.stopPropagation();handleForceReturn('${c.c_no}','${c.room}')"
+            class="ml-1 shrink-0 bg-rose-600 hover:bg-rose-700 text-white text-[10px]
+                   px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+            強制歸還
+          </button>` : ''}
       </div>`;
   }).join('');
 
-  // Store schedule for detail panel
-  window._ganttSchedule = schedule;
-
-  wrap.innerHTML = `
-    <div class="min-w-[600px]">
-      <p class="text-xs font-semibold text-gray-500 mb-6">教室：${room}</p>
-      <!-- Time ruler -->
-      <div class="relative h-5 mb-1">${ticksHtml}</div>
-      <!-- Bars container -->
-      <div class="relative h-10 bg-gray-50 rounded-lg border border-gray-200">
+  body.innerHTML = `
+    <div class="relative pt-6 pb-3">
+      <div class="relative h-5 mb-2">${ticksHtml}</div>
+      <div class="relative h-12 bg-slate-50 dark:bg-slate-800/50 rounded-xl
+                  border border-slate-200 dark:border-slate-700 overflow-visible">
         ${barsHtml}
-      </div>
-      <!-- Bottom labels -->
-      <div class="relative h-5 mt-1">
-        ${schedule.map(c => `
-          <div class="absolute text-[9px] text-gray-400 -translate-x-1/2"
-               style="left:calc(${leftPct(c.time)}% + ${widthPct(c.time,c.credits)/2}%)">
-            ${c.room}
-          </div>`).join('')}
       </div>
     </div>`;
 }
@@ -374,23 +463,27 @@ function renderGantt(room, schedule) {
 function showGanttDetail(idx) {
   const c = window._ganttSchedule?.[idx];
   if (!c) return;
-  const panel = document.getElementById('ganttDetail');
-  const endMin = courseEndMin(c.time, c.credits);
+  const panel   = document.getElementById('ganttDetail');
+  const endMin  = timeStrToMin(c.time) + c.credits * 60 - 10;
   const occupied = c.lend_sid !== 'null';
   panel.classList.remove('hidden');
   panel.innerHTML = `
-    <p class="font-semibold text-gray-700">${c.title} <span class="font-mono text-indigo-500 text-xs">${c.c_no}</span></p>
-    <p class="text-gray-500 text-xs">教室：${c.room} &nbsp;｜&nbsp; 時段：${c.time.slice(0,5)} – ${minToTimeStr(endMin)} &nbsp;｜&nbsp; 學分：${c.credits}</p>
+    <p class="font-semibold dark:text-slate-100">
+      ${c.title}
+      <span class="font-mono text-indigo-500 dark:text-indigo-400 text-xs ml-1">${c.c_no}</span>
+    </p>
+    <p class="text-slate-500 dark:text-slate-400 text-xs">
+      教室：${c.room} ｜ 時段：${c.time.slice(0,5)} – ${minToTimeStr(endMin)} ｜ 學分：${c.credits}
+    </p>
     ${occupied
-      ? `<p class="text-xs mt-1">借用者：<strong>${c.lend_name}</strong>（${c.lend_sid}）</p>
+      ? `<p class="text-xs mt-1 dark:text-slate-200">借用者：<strong>${c.lend_name}</strong>（${c.lend_sid}）</p>
          ${c.can_force_return
-           ? `<p class="text-xs text-rose-600 mt-1">⚠ 您的課程將接續此教室，可強制歸還</p>
+           ? `<p class="text-xs text-rose-600 dark:text-rose-400 mt-1">⚠ 您的課程將接續此教室，可強制歸還</p>
               <button onclick="handleForceReturn('${c.c_no}','${c.room}')"
-                class="mt-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
-                強制歸還此教室
-              </button>`
+                class="mt-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold
+                       px-3 py-1.5 rounded-xl transition">強制歸還此教室</button>`
            : ''}`
-      : `<p class="text-xs text-emerald-600 mt-1">✓ 此教室目前空閒</p>`
+      : `<p class="text-xs text-emerald-600 dark:text-emerald-400 mt-1">✓ 此教室目前空閒</p>`
     }`;
 }
 
@@ -399,13 +492,21 @@ async function handleForceReturn(c_no, room) {
   try {
     const data = await api('/borrow/force-return', { method: 'POST', body: JSON.stringify({ c_no }) });
     toast(data.message, 'success');
-    loadGantt();
+    // Refresh the open gantt modal
+    const modal = document.getElementById('ganttModal');
+    if (!modal.classList.contains('hidden')) {
+      const title   = document.getElementById('ganttModalTitle').textContent;
+      const parts   = title.split(' — ');
+      const roomKey = parts[0];
+      const dayIdx  = DAYS.indexOf(parts[1]);
+      if (dayIdx >= 0) openGanttModal(roomKey, dayIdx + 1);
+    }
     loadMyRoomBorrows();
     document.getElementById('ganttDetail').classList.add('hidden');
   } catch (e) { toast(e.message); }
 }
 
-// ── Settings ──────────────────────────────────────────────────────────────────
+// ── Settings ───────────────────────────────────────────────────────────────────
 async function handleChangePw() {
   const newPw = document.getElementById('newPwInput').value;
   if (!newPw.trim()) { toast('新密碼不得為空'); return; }
@@ -416,7 +517,7 @@ async function handleChangePw() {
   } catch (e) { toast(e.message); }
 }
 
-// ── Key modal ─────────────────────────────────────────────────────────────────
+// ── Key modal ──────────────────────────────────────────────────────────────────
 function showKeyModal(key) {
   document.getElementById('keyDisplay').textContent = key;
   document.getElementById('keyModal').classList.remove('hidden');
@@ -425,7 +526,7 @@ function closeKeyModal() {
   document.getElementById('keyModal').classList.add('hidden');
 }
 
-// ── Notifications ─────────────────────────────────────────────────────────────
+// ── Notifications ──────────────────────────────────────────────────────────────
 function toggleNotifDrawer() {
   const drawer  = document.getElementById('notifDrawer');
   const overlay = document.getElementById('notifOverlay');
@@ -441,26 +542,31 @@ async function loadNotifications() {
     const { notifications, unread } = await api('/notifications');
     updateNotifBadge(unread);
     if (!notifications.length) {
-      el.innerHTML = '<p class="text-gray-400 text-sm text-center mt-8">沒有通知</p>';
+      el.innerHTML = '<p class="text-slate-400 text-sm text-center mt-8">沒有通知</p>';
       return;
     }
     el.innerHTML = notifications.map(n => `
-      <div class="rounded-xl p-3 text-sm ${n.is_read ? 'bg-gray-50' : 'bg-indigo-50 border border-indigo-100'} cursor-pointer"
+      <div class="rounded-xl p-3 text-sm cursor-pointer transition
+                  ${n.is_read
+                    ? 'bg-slate-50 dark:bg-slate-700/40'
+                    : 'bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800/50'}"
            onclick="markOneRead(${n.id}, this)">
-        <p class="${n.is_read ? 'text-gray-600' : 'text-gray-800 font-medium'}">${n.message}</p>
-        <p class="text-[10px] text-gray-400 mt-1">${n.created_at}</p>
+        <p class="${n.is_read ? 'text-slate-600 dark:text-slate-300' : 'text-slate-800 dark:text-slate-100 font-medium'}">${n.message}</p>
+        <p class="text-[10px] text-slate-400 mt-1">${n.created_at}</p>
       </div>`).join('');
   } catch {
     el.innerHTML = '<p class="text-red-400 text-sm text-center">載入失敗</p>';
   }
 }
 
-async function markOneRead(id, el) {
+async function markOneRead(id, elItem) {
   try {
     await api('/notifications/read', { method: 'POST', body: JSON.stringify({ notif_id: id }) });
-    el.classList.remove('bg-indigo-50', 'border', 'border-indigo-100');
-    el.classList.add('bg-gray-50');
-    el.querySelector('p').classList.remove('font-medium');
+    elItem.classList.remove('bg-indigo-50', 'dark:bg-indigo-900/30', 'border',
+                            'border-indigo-100', 'dark:border-indigo-800/50');
+    elItem.classList.add('bg-slate-50', 'dark:bg-slate-700/40');
+    const p = elItem.querySelector('p');
+    if (p) { p.classList.remove('font-medium'); p.classList.add('text-slate-600', 'dark:text-slate-300'); }
     pollNotifications();
   } catch {}
 }
@@ -476,11 +582,9 @@ function updateNotifBadge(unread) {
   const badge = document.getElementById('notifBadge');
   if (unread > 0) {
     badge.textContent = unread > 9 ? '9+' : unread;
-    badge.classList.remove('hidden');
-    badge.classList.add('flex');
+    badge.classList.add('show');
   } else {
-    badge.classList.add('hidden');
-    badge.classList.remove('flex');
+    badge.classList.remove('show');
   }
 }
 
@@ -491,7 +595,7 @@ async function pollNotifications() {
   } catch {}
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Auth ───────────────────────────────────────────────────────────────────────
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const sid      = document.getElementById('sidInput').value.trim();
@@ -522,9 +626,10 @@ async function handleLogout() {
   showPage('login');
 }
 
-// ── Dashboard init ────────────────────────────────────────────────────────────
+// ── Dashboard init ─────────────────────────────────────────────────────────────
 function initDashboard() {
-  document.getElementById('navUser').textContent = `${currentUser.name}（${currentUser.sid}）`;
+  document.getElementById('navUser').textContent =
+    `${currentUser.name}（${currentUser.sid}）`;
   const hash = window.location.hash.replace('#', '') || 'status';
   switchTab(TABS.includes(hash) ? hash : 'status');
   pollNotifications();
@@ -532,16 +637,34 @@ function initDashboard() {
   notifPollTimer = setInterval(pollNotifications, 30000);
 }
 
-// ── Utility ───────────────────────────────────────────────────────────────────
-function formatTimeRange(timeStr, credits) {
-  if (!timeStr) return '-';
-  const start = timeStr.slice(0, 5);
-  const startMin = timeStrToMin(timeStr);
-  const endMin = startMin + credits * 60 - 10;
-  return `${start}–${minToTimeStr(endMin)}`;
+// ── Utilities ──────────────────────────────────────────────────────────────────
+function timeStrToMin(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+function minToTimeStr(min) {
+  const h = Math.floor(min / 60).toString().padStart(2, '0');
+  const m = (min % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function formatTimeRange(timeStr, credits) {
+  if (!timeStr) return '-';
+  const startMin = timeStrToMin(timeStr);
+  const endMin   = startMin + credits * 60 - 10;
+  return `${timeStr.slice(0,5)}–${minToTimeStr(endMin)}`;
+}
+
+function leftPct(timeStr) {
+  return ((timeStrToMin(timeStr) - GANTT_START) / GANTT_RANGE * 100).toFixed(2);
+}
+
+function widthPct(timeStr, credits) {
+  return ((credits * 60 - 10) / GANTT_RANGE * 100).toFixed(2);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
 window.addEventListener('hashchange', () => {
   const name = window.location.hash.replace('#', '');
   if (TABS.includes(name)) switchTab(name);
